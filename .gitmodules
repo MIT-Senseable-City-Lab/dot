@@ -1,0 +1,3 @@
+[submodule "trapjaw"]
+	path = trapjaw
+	url = git@github.com:amundlrohne/trapjaw.git
