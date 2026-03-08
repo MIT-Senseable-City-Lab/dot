@@ -19,7 +19,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SUBMODULE_DIR="$SCRIPT_DIR/trapjaw"
 OUTPUT_DIR="$SCRIPT_DIR/lib"
-DEPLOYMENT_TARGET="16.0"
+DEPLOYMENT_TARGET="18.0"
 
 TARGET="${1:-all}"
 

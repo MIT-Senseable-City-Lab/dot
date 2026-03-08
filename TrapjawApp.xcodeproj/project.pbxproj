@@ -46,7 +46,7 @@
 		A10001BC /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		A10001BD /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		A10001BE /* libtrapjaw.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libtrapjaw.a; path = lib/iphoneos/libtrapjaw.a; sourceTree = SOURCE_ROOT; };
-		A10001BF /* trapjaw.metallib */ = {isa = PBXFileReference; lastKnownFileType = file; name = trapjaw.metallib; path = lib/trapjaw.metallib; sourceTree = SOURCE_ROOT; };
+		A10001BF /* trapjaw.metallib */ = {isa = PBXFileReference; lastKnownFileType = "archive.metal-library"; name = trapjaw.metallib; path = lib/trapjaw.metallib; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -67,7 +67,7 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		A1000187 /* root */ = {
+		A1000187 = {
 			isa = PBXGroup;
 			children = (
 				A1000192 /* TrapjawApp */,
@@ -192,7 +192,7 @@
 				en,
 				Base,
 			);
-			mainGroup = A1000187 /* root */;
+			mainGroup = A1000187;
 			productRefGroup = A1000191 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -285,7 +285,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -341,7 +341,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
@@ -357,10 +357,9 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JGAKU9SM23;
 				GENERATE_INFOPLIST_FILE = NO;
-				HEADER_SEARCH_PATHS = (
-					"$(SRCROOT)/trapjaw/include",
-				);
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/trapjaw/include";
 				INFOPLIST_FILE = TrapjawApp/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -371,9 +370,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(SRCROOT)/lib/iphoneos",
-				);
+				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/lib/iphoneos";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.trapjaw.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -382,7 +379,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "TrapjawApp/Bridge/TrapjawApp-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -393,10 +390,9 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JGAKU9SM23;
 				GENERATE_INFOPLIST_FILE = NO;
-				HEADER_SEARCH_PATHS = (
-					"$(SRCROOT)/trapjaw/include",
-				);
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/trapjaw/include";
 				INFOPLIST_FILE = TrapjawApp/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -407,9 +403,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(SRCROOT)/lib/iphoneos",
-				);
+				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/lib/iphoneos";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.trapjaw.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -418,7 +412,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "TrapjawApp/Bridge/TrapjawApp-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -444,7 +438,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
 	};
 	rootObject = A1000188 /* Project object */;
 }
