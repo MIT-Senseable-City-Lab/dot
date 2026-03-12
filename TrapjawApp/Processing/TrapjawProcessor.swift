@@ -24,6 +24,8 @@ final class TrapjawProcessor {
     private(set) var state: ProcessorState = .idle
     private(set) var isConnected: Bool = false
     private(set) var tracksSent: Int = 0
+    private(set) var pendingUploads: Int = 0
+    private(set) var uploadErrors: Int = 0
 
     enum ProcessorState: String {
         case idle = "Idle"
@@ -84,10 +86,29 @@ final class TrapjawProcessor {
             name: .trackSent,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(uploadPendingChanged),
+            name: .uploadPendingChanged,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(uploadErrorOccurred),
+            name: .uploadErrorOccurred,
+            object: nil
+        )
     }
     
     deinit {
         NotificationCenter.default.removeObserver(self)
+        if Thread.isMainThread {
+            UIApplication.shared.isIdleTimerDisabled = false
+        } else {
+            DispatchQueue.main.sync {
+                UIApplication.shared.isIdleTimerDisabled = false
+            }
+        }
     }
     
     @objc private func connectionStatusChanged() {
@@ -99,6 +120,18 @@ final class TrapjawProcessor {
     @objc private func trackSentNotification() {
         DispatchQueue.main.async { [weak self] in
             self?.tracksSent = self?.dataStreamer.tracksSentThisSession ?? 0
+        }
+    }
+    
+    @objc private func uploadPendingChanged() {
+        DispatchQueue.main.async { [weak self] in
+            self?.pendingUploads = self?.httpUploader.pendingUploads ?? 0
+        }
+    }
+    
+    @objc private func uploadErrorOccurred() {
+        DispatchQueue.main.async { [weak self] in
+            self?.uploadErrors = self?.httpUploader.uploadErrors ?? 0
         }
     }
 
@@ -136,6 +169,9 @@ final class TrapjawProcessor {
             cameraManager.start()
             dataStreamer.start()
             isRunning = true
+            DispatchQueue.main.async {
+                UIApplication.shared.isIdleTimerDisabled = true
+            }
             state = .warmingUp
 
         } catch {
@@ -156,6 +192,9 @@ final class TrapjawProcessor {
         
         bridge = nil
         isRunning = false
+        DispatchQueue.main.async {
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
         state = .idle
     }
     

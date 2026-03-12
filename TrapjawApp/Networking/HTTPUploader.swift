@@ -3,12 +3,17 @@
 //  TrapjawApp
 //
 //  Multipart HTTP uploader for crop images.
-//  Uploads JPEG frames to the Pi server.
+//  Uploads JPEG frames to the Pi server with retry logic.
 //
 
 import Foundation
 import UIKit
 import os.log
+
+extension Notification.Name {
+    static let uploadPendingChanged = Notification.Name("uploadPendingChanged")
+    static let uploadErrorOccurred = Notification.Name("uploadErrorOccurred")
+}
 
 private let logger = Logger(subsystem: "com.trapjaw.upload", category: "HTTPUploader")
 
@@ -17,12 +22,29 @@ final class HTTPUploader {
     static let shared = HTTPUploader()
     
     private let config = NetworkConfig.shared
+    private let maxRetries = 3
+    private let baseDelay: TimeInterval = 1.0
+    
+    private let counterQueue = DispatchQueue(label: "com.trapjaw.uploadcounters")
+    private var _pendingUploads: Int = 0
+    private var _uploadErrors: Int = 0
+    
+    private(set) var pendingUploads: Int {
+        get { counterQueue.sync { _pendingUploads } }
+        set { counterQueue.sync { _pendingUploads = newValue } }
+    }
+    
+    private(set) var uploadErrors: Int {
+        get { counterQueue.sync { _uploadErrors } }
+        set { counterQueue.sync { _uploadErrors = newValue } }
+    }
     
     private init() {}
     
     func uploadCrops(
         trackId: String,
         crops: [Data],
+        retryCount: Int = 0,
         completion: ((Bool) -> Void)? = nil
     ) {
         guard !crops.isEmpty else {
@@ -38,6 +60,9 @@ final class HTTPUploader {
             completion?(false)
             return
         }
+        
+        pendingUploads += 1
+        NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
         
         logger.info("Uploading \(crops.count) crops for track \(trackId.prefix(8))...")
         
@@ -64,27 +89,76 @@ final class HTTPUploader {
         }
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         
-        let task = URLSession.shared.uploadTask(with: request, from: body) { data, response, error in
+        let task = URLSession.shared.uploadTask(with: request, from: body) { [weak self] data, response, error in
+            guard let self else { return }
+            
             if let error = error {
-                logger.error("Crop upload failed: \(error.localizedDescription)")
+                logger.error("Crop upload failed (attempt \(retryCount + 1)): \(error.localizedDescription)")
+                
+                if retryCount < self.maxRetries {
+                    let delay = self.baseDelay * pow(2.0, Double(retryCount))
+                    logger.info("Retrying in \(delay)s...")
+                    
+                    DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
+                        self.uploadCrops(trackId: trackId, crops: crops, retryCount: retryCount + 1, completion: completion)
+                    }
+                    return
+                }
+                
+                self.pendingUploads -= 1
+                self.uploadErrors += 1
+                NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
+                NotificationCenter.default.post(name: .uploadErrorOccurred, object: nil)
                 completion?(false)
                 return
             }
             
             guard let httpResponse = response as? HTTPURLResponse else {
                 logger.error("Invalid response type")
+                
+                if retryCount < self.maxRetries {
+                    let delay = self.baseDelay * pow(2.0, Double(retryCount))
+                    DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
+                        self.uploadCrops(trackId: trackId, crops: crops, retryCount: retryCount + 1, completion: completion)
+                    }
+                    return
+                }
+                
+                self.pendingUploads -= 1
+                self.uploadErrors += 1
+                NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
+                NotificationCenter.default.post(name: .uploadErrorOccurred, object: nil)
                 completion?(false)
                 return
             }
             
             if httpResponse.statusCode == 200 {
                 logger.info("Successfully uploaded \(crops.count) crops for track \(trackId.prefix(8))...")
+                self.pendingUploads -= 1
+                NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
                 completion?(true)
             } else {
                 logger.error("Upload failed with status \(httpResponse.statusCode)")
+                
+                if retryCount < self.maxRetries {
+                    let delay = self.baseDelay * pow(2.0, Double(retryCount))
+                    DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
+                        self.uploadCrops(trackId: trackId, crops: crops, retryCount: retryCount + 1, completion: completion)
+                    }
+                    return
+                }
+                
+                self.pendingUploads -= 1
+                self.uploadErrors += 1
+                NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
+                NotificationCenter.default.post(name: .uploadErrorOccurred, object: nil)
                 completion?(false)
             }
         }
         task.resume()
+    }
+    
+    func resetErrorCount() {
+        uploadErrors = 0
     }
 }

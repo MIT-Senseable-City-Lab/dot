@@ -128,6 +128,11 @@ struct ContentView: View {
             // Network stats
             HStack(spacing: 24) {
                 metricTile(label: "SENT", value: "\(processor.tracksSent)")
+                metricTile(label: "PENDING", value: "\(processor.pendingUploads)")
+            }
+
+            HStack(spacing: 24) {
+                metricTile(label: "FAILED", value: "\(processor.uploadErrors)")
                 metricTile(label: "BUFFERED", value: "\(TrackBuffer.shared.getTotalBufferedCropCount())")
             }
 
