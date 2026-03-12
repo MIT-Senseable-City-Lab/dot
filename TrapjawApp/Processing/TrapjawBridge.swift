@@ -13,12 +13,12 @@ import CoreVideo
 /// Data extracted from a trapjaw crop callback, safe to hold beyond the callback lifetime.
 struct CropData {
     let trackID: UInt32
-    let bbox: tj_bbox_t
+    let bbox: CGRect
     let width: UInt32
     let height: UInt32
     let frameIndex: UInt64
     let timestamp: Double
-    let pixelData: Data  // Copy of BGRA8 pixels
+    let pixelData: Data
 }
 
 /// Swift wrapper around the trapjaw C context.
@@ -131,8 +131,30 @@ final class TrapjawBridge {
     /// Get currently active track count.
     func getActiveTrackCount() -> UInt32 {
         guard let ctx = context else { return 0 }
-        // Pass nil buffer with 0 max to just get the count
         return tj_get_active_tracks(ctx, nil, 0)
+    }
+    
+    /// Get the set of currently active track IDs.
+    func getActiveTrackIds() -> Set<UInt32> {
+        guard let ctx = context else { return [] }
+        
+        let count = tj_get_active_tracks(ctx, nil, 0)
+        guard count > 0 else { return [] }
+        
+        var tracks = [tj_track_t](repeating: tj_track_t(), count: Int(count))
+        let actualCount = tj_get_active_tracks(ctx, &tracks, count)
+        
+        var trackIds = Set<UInt32>()
+        for i in 0..<Int(actualCount) {
+            trackIds.insert(tracks[i].id)
+        }
+        return trackIds
+    }
+    
+    /// Get the stitched ID for a raw track ID.
+    func getStitchedId(rawTrackId: UInt32) -> UInt32 {
+        guard let ctx = context else { return rawTrackId }
+        return tj_get_stitched_id(ctx, rawTrackId)
     }
 
     // MARK: - Callback Handlers
@@ -143,7 +165,12 @@ final class TrapjawBridge {
 
         let cropData = CropData(
             trackID: crop.track_id,
-            bbox: crop.bbox,
+            bbox: CGRect(
+                x: CGFloat(crop.bbox.x),
+                y: CGFloat(crop.bbox.y),
+                width: CGFloat(crop.bbox.w),
+                height: CGFloat(crop.bbox.h)
+            ),
             width: crop.width,
             height: crop.height,
             frameIndex: crop.frame_index,

@@ -14,7 +14,6 @@
 		A10001AE /* TrapjawBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001A4 /* TrapjawBridge.swift */; };
 		A10001AF /* TrapjawProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001A5 /* TrapjawProcessor.swift */; };
 		A10001B0 /* PerformanceMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001A6 /* PerformanceMetrics.swift */; };
-		A10001B1 /* ServerClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001A7 /* ServerClient.swift */; };
 		A10001B2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10001A8 /* Assets.xcassets */; };
 		A10001C0 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10001B8 /* Metal.framework */; };
 		A10001C1 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10001B9 /* AVFoundation.framework */; };
@@ -24,6 +23,13 @@
 		A10001C5 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10001BD /* QuartzCore.framework */; };
 		A10001C6 /* libtrapjaw.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A10001BE /* libtrapjaw.a */; };
 		A10001C7 /* trapjaw.metallib in Resources */ = {isa = PBXBuildFile; fileRef = A10001BF /* trapjaw.metallib */; };
+		A10001D5 /* TrackNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001D8 /* TrackNode.swift */; };
+		A10001D6 /* StreamResolution.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001D9 /* StreamResolution.swift */; };
+		A10001D7 /* InsectTelemetryPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001DA /* InsectTelemetryPayload.swift */; };
+		A10001E0 /* TrackBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E3 /* TrackBuffer.swift */; };
+		A10001E1 /* NetworkConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E4 /* NetworkConfig.swift */; };
+		A10001E2 /* DataStreamer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E5 /* DataStreamer.swift */; };
+		A10001E6 /* HTTPUploader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E7 /* HTTPUploader.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,7 +41,6 @@
 		A10001A4 /* TrapjawBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrapjawBridge.swift; sourceTree = "<group>"; };
 		A10001A5 /* TrapjawProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrapjawProcessor.swift; sourceTree = "<group>"; };
 		A10001A6 /* PerformanceMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceMetrics.swift; sourceTree = "<group>"; };
-		A10001A7 /* ServerClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerClient.swift; sourceTree = "<group>"; };
 		A10001A8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A10001A9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A10001B3 /* TrapjawApp-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "TrapjawApp-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -47,6 +52,13 @@
 		A10001BD /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		A10001BE /* libtrapjaw.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libtrapjaw.a; path = lib/iphoneos/libtrapjaw.a; sourceTree = SOURCE_ROOT; };
 		A10001BF /* trapjaw.metallib */ = {isa = PBXFileReference; lastKnownFileType = "archive.metal-library"; name = trapjaw.metallib; path = lib/trapjaw.metallib; sourceTree = SOURCE_ROOT; };
+		A10001D8 /* TrackNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackNode.swift; sourceTree = "<group>"; };
+		A10001D9 /* StreamResolution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamResolution.swift; sourceTree = "<group>"; };
+		A10001DA /* InsectTelemetryPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsectTelemetryPayload.swift; sourceTree = "<group>"; };
+		A10001E3 /* TrackBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackBuffer.swift; sourceTree = "<group>"; };
+		A10001E4 /* NetworkConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkConfig.swift; sourceTree = "<group>"; };
+		A10001E5 /* DataStreamer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStreamer.swift; sourceTree = "<group>"; };
+		A10001E7 /* HTTPUploader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPUploader.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -94,6 +106,7 @@
 				A1000193 /* Camera */,
 				A1000194 /* Processing */,
 				A1000195 /* Networking */,
+				A1000197 /* Models */,
 				A1000196 /* Bridge */,
 			);
 			path = TrapjawApp;
@@ -114,6 +127,7 @@
 				A10001A4 /* TrapjawBridge.swift */,
 				A10001A5 /* TrapjawProcessor.swift */,
 				A10001A6 /* PerformanceMetrics.swift */,
+				A10001E3 /* TrackBuffer.swift */,
 			);
 			path = Processing;
 			sourceTree = "<group>";
@@ -121,7 +135,9 @@
 		A1000195 /* Networking */ = {
 			isa = PBXGroup;
 			children = (
-				A10001A7 /* ServerClient.swift */,
+				A10001E4 /* NetworkConfig.swift */,
+				A10001E5 /* DataStreamer.swift */,
+				A10001E7 /* HTTPUploader.swift */,
 			);
 			path = Networking;
 			sourceTree = "<group>";
@@ -132,6 +148,16 @@
 				A10001B3 /* TrapjawApp-Bridging-Header.h */,
 			);
 			path = Bridge;
+			sourceTree = "<group>";
+		};
+		A1000197 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				A10001D8 /* TrackNode.swift */,
+				A10001D9 /* StreamResolution.swift */,
+				A10001DA /* InsectTelemetryPayload.swift */,
+			);
+			path = Models;
 			sourceTree = "<group>";
 		};
 		A10001B7 /* Frameworks */ = {
@@ -226,7 +252,13 @@
 				A10001AE /* TrapjawBridge.swift in Sources */,
 				A10001AF /* TrapjawProcessor.swift in Sources */,
 				A10001B0 /* PerformanceMetrics.swift in Sources */,
-				A10001B1 /* ServerClient.swift in Sources */,
+				A10001D5 /* TrackNode.swift in Sources */,
+				A10001D6 /* StreamResolution.swift in Sources */,
+				A10001D7 /* InsectTelemetryPayload.swift in Sources */,
+				A10001E0 /* TrackBuffer.swift in Sources */,
+				A10001E1 /* NetworkConfig.swift in Sources */,
+				A10001E2 /* DataStreamer.swift in Sources */,
+				A10001E6 /* HTTPUploader.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -53,10 +53,21 @@ struct ContentView: View {
 
             Spacer()
 
+            // Connection status
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(processor.isConnected ? .green : .red)
+                    .frame(width: 8, height: 8)
+                Text(processor.isConnected ? "CONNECTED" : "OFFLINE")
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(processor.isConnected ? .green : .red)
+            }
+
             if processor.metrics.isWarmingUp && processor.isRunning {
                 Text("BG MODEL WARMUP")
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.orange)
+                    .padding(.leading, 8)
             }
         }
     }
@@ -112,6 +123,12 @@ struct ContentView: View {
             HStack(spacing: 24) {
                 metricTile(label: "CROPS", value: "\(metrics.totalCrops)")
                 metricTile(label: "FRAMES", value: "\(metrics.totalFrames)")
+            }
+
+            // Network stats
+            HStack(spacing: 24) {
+                metricTile(label: "SENT", value: "\(processor.tracksSent)")
+                metricTile(label: "BUFFERED", value: "\(TrackBuffer.shared.getTotalBufferedCropCount())")
             }
 
             // Error display

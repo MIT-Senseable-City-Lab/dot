@@ -3,14 +3,15 @@
 //  TrapjawApp
 //
 //  Orchestrates the full pipeline: receives camera frames from CameraManager,
-//  feeds them through TrapjawBridge, collects crops, updates metrics,
-//  and dispatches crops to the ServerClient.
+//  feeds them through TrapjawBridge, buffers crops, detects track termination,
+//  and uploads telemetry + crops to the server.
 //
 
 import Foundation
 import AVFoundation
 import Metal
 import CoreVideo
+import UIKit
 
 @Observable
 final class TrapjawProcessor {
@@ -21,6 +22,8 @@ final class TrapjawProcessor {
     private(set) var isRunning = false
     private(set) var error: Error?
     private(set) var state: ProcessorState = .idle
+    private(set) var isConnected: Bool = false
+    private(set) var tracksSent: Int = 0
 
     enum ProcessorState: String {
         case idle = "Idle"
@@ -35,7 +38,6 @@ final class TrapjawProcessor {
 
     let cameraManager = CameraManager()
     private var bridge: TrapjawBridge?
-    private let serverClient: ServerClientProtocol
     private let metalDevice: MTLDevice?
 
     // MARK: - Processing State
@@ -43,28 +45,65 @@ final class TrapjawProcessor {
     private var frameIndex: UInt64 = 0
     private var startTime: CFAbsoluteTime = 0
     private let config: tj_config_t
-    private let statsUpdateInterval: UInt64 = 30  // Update stats every N frames
+    private let statsUpdateInterval: UInt64 = 30
+    private let terminationCheckInterval: UInt64 = 60
+    
+    // MARK: - Networking
+    
+    private let dataStreamer = DataStreamer.shared
+    private let httpUploader = HTTPUploader.shared
+    private let trackBuffer = TrackBuffer.shared
+    private let networkConfig = NetworkConfig.shared
+    
+    // MARK: - JPEG Conversion Queue
+    
+    private let jpegQueue = DispatchQueue(label: "com.trapjaw.jpeg", qos: .utility, attributes: .concurrent)
 
     // MARK: - Init
 
-    init(serverClient: ServerClientProtocol = StubServerClient(), config: tj_config_t? = nil) {
-        self.serverClient = serverClient
+    init(config: tj_config_t? = nil) {
         self.metalDevice = MTLCreateSystemDefaultDevice()
 
         var cfg = config ?? tj_config_defaults()
-        // iPhone wide camera defaults — 1920x1080 at 30fps, 67deg FOV
-        // These match the CameraManager's .hd1920x1080 preset
         cfg.frame_width = 1920
         cfg.frame_height = 1080
         cfg.fps = 30.0
         cfg.camera_fov_degrees = 67.0
-        cfg.debug_enabled = true  // Enable debug callback for pipeline timing
+        cfg.debug_enabled = true
         self.config = cfg
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(connectionStatusChanged),
+            name: .connectionStatusChanged,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(trackSentNotification),
+            name: .trackSent,
+            object: nil
+        )
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+    
+    @objc private func connectionStatusChanged() {
+        DispatchQueue.main.async { [weak self] in
+            self?.isConnected = self?.dataStreamer.isConnected ?? false
+        }
+    }
+    
+    @objc private func trackSentNotification() {
+        DispatchQueue.main.async { [weak self] in
+            self?.tracksSent = self?.dataStreamer.tracksSentThisSession ?? 0
+        }
     }
 
     // MARK: - Lifecycle
 
-    /// Start the capture and processing pipeline.
     func start() async {
         guard !isRunning else { return }
 
@@ -73,18 +112,17 @@ final class TrapjawProcessor {
         frameIndex = 0
         startTime = CFAbsoluteTimeGetCurrent()
         metrics.reset()
+        trackBuffer.clear()
+        networkConfig.startNewSession()
 
         do {
-            // Initialize trapjaw
             let bridge = try TrapjawBridge(config: config, device: metalDevice)
             self.bridge = bridge
 
-            // Wire up crop callback
             bridge.onCrop = { [weak self] crop in
                 self?.handleCrop(crop)
             }
 
-            // Wire up debug callback for pipeline timing
             bridge.onDebugFrame = { [weak self] (pipelineMs, activeTracks, frameIdx) in
                 guard let self else { return }
                 DispatchQueue.main.async {
@@ -92,12 +130,11 @@ final class TrapjawProcessor {
                 }
             }
 
-            // Configure camera
             try await cameraManager.configure()
             cameraManager.delegate = self
 
-            // Start capture
             cameraManager.start()
+            dataStreamer.start()
             isRunning = true
             state = .warmingUp
 
@@ -107,25 +144,136 @@ final class TrapjawProcessor {
         }
     }
 
-    /// Stop the capture and processing pipeline.
     func stop() {
         guard isRunning else { return }
 
         state = .stopping
+        dataStreamer.stop()
         cameraManager.stop()
         bridge?.flush()
+        
+        flushRemainingTracks()
+        
         bridge = nil
         isRunning = false
         state = .idle
     }
+    
+    private func flushRemainingTracks() {
+        guard let bridge else { return }
+        
+        let activeIds = bridge.getActiveTrackIds()
+        let resolution = StreamResolution(
+            width: Int(config.frame_width),
+            height: Int(config.frame_height)
+        )
+        
+        let finalizedTracks = trackBuffer.finalizeTerminatedTracks(
+            activeTrackIds: activeIds,
+            resolution: resolution
+        )
+        
+        for track in finalizedTracks {
+            uploadTrack(track)
+        }
+    }
 
-    // MARK: - Private
+    // MARK: - Crop Handling
 
     private func handleCrop(_ crop: CropData) {
-        // Dispatch crop to server client
-        Task {
-            try? await serverClient.sendCrop(crop)
+        guard let bridge else { return }
+        
+        let stitchedId = bridge.getStitchedId(rawTrackId: crop.trackID)
+        trackBuffer.setStitchedId(rawTrackId: crop.trackID, stitchedId: stitchedId)
+        
+        let trackId = crop.trackID
+        let bbox = crop.bbox
+        let width = crop.width
+        let height = crop.height
+        let frameIndex = crop.frameIndex
+        let timestamp = crop.timestamp
+        let pixelData = crop.pixelData
+        
+        jpegQueue.async { [weak self] in
+            guard let self else { return }
+            
+            guard let jpegData = self.convertToJPEG(pixelData, width: width, height: height) else {
+                return
+            }
+            
+            let resolution = StreamResolution(
+                width: Int(self.config.frame_width),
+                height: Int(self.config.frame_height)
+            )
+            
+            if let trackToUpload = self.trackBuffer.addCrop(
+                trackId: trackId,
+                bbox: bbox,
+                frameIndex: frameIndex,
+                timestamp: timestamp,
+                jpegData: jpegData,
+                resolution: resolution
+            ) {
+                self.uploadTrack(trackToUpload)
+            }
         }
+    }
+    
+    private func convertToJPEG(_ pixelData: Data, width: UInt32, height: UInt32) -> Data? {
+        let cgImage = createCGImage(from: pixelData, width: width, height: height)
+        let uiImage = UIImage(cgImage: cgImage)
+        return uiImage.jpegData(compressionQuality: 0.7)
+    }
+    
+    private func createCGImage(from pixelData: Data, width: UInt32, height: UInt32) -> CGImage {
+        let bytesPerPixel = 4
+        let bytesPerRow = Int(width) * bytesPerPixel
+        
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)
+        
+        let context = CGContext(
+            data: UnsafeMutablePointer(mutating: (pixelData as NSData).bytes.bindMemory(to: UInt8.self, capacity: pixelData.count)),
+            width: Int(width),
+            height: Int(height),
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo.rawValue
+        )!
+        
+        return context.makeImage()!
+    }
+    
+    // MARK: - Track Upload
+    
+    private func uploadTrack(_ track: FinalizedTrack) {
+        let trackIdString = String(track.stitchedId)
+        
+        let points = track.crops.map { crop -> TrackNode in
+            TrackNode(
+                timestamp: Date(timeIntervalSince1970: crop.timestamp),
+                x: crop.bbox.origin.x,
+                y: crop.bbox.origin.y,
+                width: crop.bbox.size.width,
+                height: crop.bbox.size.height,
+                frameIndex: Int(crop.frameIndex)
+            )
+        }
+        
+        let payload = InsectTelemetryPayload(
+            trackId: trackIdString,
+            status: "completed",
+            resolution: track.resolution,
+            points: points,
+            deviceId: networkConfig.deviceId,
+            deviceName: networkConfig.deviceName
+        )
+        
+        dataStreamer.sendTrackTelemetry(payload)
+        
+        let jpegDataArray = track.crops.map { $0.jpegData }
+        httpUploader.uploadCrops(trackId: trackIdString, crops: jpegDataArray)
     }
 
     private func updateStats() {
@@ -145,6 +293,25 @@ final class TrapjawProcessor {
             }
         }
     }
+    
+    private func checkTerminatedTracks() {
+        guard let bridge else { return }
+        
+        let activeIds = bridge.getActiveTrackIds()
+        let resolution = StreamResolution(
+            width: Int(config.frame_width),
+            height: Int(config.frame_height)
+        )
+        
+        let finalizedTracks = trackBuffer.finalizeTerminatedTracks(
+            activeTrackIds: activeIds,
+            resolution: resolution
+        )
+        
+        for track in finalizedTracks {
+            uploadTrack(track)
+        }
+    }
 }
 
 // MARK: - CameraManagerDelegate
@@ -153,22 +320,18 @@ extension TrapjawProcessor: CameraManagerDelegate {
     func cameraManager(_ manager: CameraManager, didOutput sampleBuffer: CMSampleBuffer) {
         guard let bridge, isRunning else { return }
 
-        // Record camera frame delivery
         DispatchQueue.main.async { [weak self] in
             self?.metrics.recordCameraFrame()
         }
 
-        // Extract pixel buffer
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
-        // Calculate timestamp relative to start
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         let timestamp = CMTimeGetSeconds(pts)
 
         let currentIndex = frameIndex
         frameIndex += 1
 
-        // Process through trapjaw
         let result = bridge.processFrame(
             pixelBuffer: pixelBuffer,
             frameIndex: currentIndex,
@@ -181,9 +344,12 @@ extension TrapjawProcessor: CameraManagerDelegate {
             }
         }
 
-        // Periodic stats update
         if currentIndex % statsUpdateInterval == 0 {
             updateStats()
+        }
+        
+        if currentIndex % terminationCheckInterval == 0 {
+            checkTerminatedTracks()
         }
     }
 
