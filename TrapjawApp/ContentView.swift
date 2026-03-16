@@ -29,11 +29,6 @@ struct ContentView: View {
                     .padding(.horizontal, 16)
 
                 Spacer()
-
-                // Controls
-                controlBar
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 16)
             }
         }
         .preferredColorScheme(.dark)
@@ -167,27 +162,5 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
-    }
-
-    // MARK: - Control Bar
-
-    private var controlBar: some View {
-        Button(action: {
-            if processor.isRunning {
-                processor.stop()
-            } else {
-                Task { await processor.start() }
-            }
-        }) {
-            Text(processor.isRunning ? "STOP" : "START")
-                .font(.system(.title3, design: .monospaced).weight(.bold))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(processor.isRunning ? Color.red.opacity(0.8) : Color.green.opacity(0.8))
-                )
-        }
     }
 }

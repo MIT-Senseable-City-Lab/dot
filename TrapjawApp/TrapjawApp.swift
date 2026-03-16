@@ -15,6 +15,9 @@ struct TrapjawApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(processor: processor)
+                .task {
+                    await processor.start()
+                }
         }
     }
 }
