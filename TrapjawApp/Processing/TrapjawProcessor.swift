@@ -20,6 +20,7 @@ final class TrapjawProcessor {
 
     let metrics = PerformanceMetrics()
     private(set) var isRunning = false
+    private(set) var isStarting = false
     private(set) var error: Error?
     private(set) var state: ProcessorState = .idle
     private(set) var isConnected: Bool = false
@@ -140,7 +141,8 @@ final class TrapjawProcessor {
     // MARK: - Lifecycle
 
     func start() async {
-        guard !isRunning else { return }
+        guard !isRunning && !isStarting else { return }
+        isStarting = true
 
         state = .configuring
         error = nil
@@ -180,6 +182,8 @@ final class TrapjawProcessor {
             self.error = error
             state = .failed
         }
+        
+        isStarting = false
     }
 
     func stop() {
@@ -203,7 +207,7 @@ final class TrapjawProcessor {
     // MARK: - Pause/Resume for Operating Hours
     
     func pause() {
-        guard isRunning else { return }
+        guard isRunning && !isStarting else { return }
         
         state = .stopping
         
@@ -228,7 +232,7 @@ final class TrapjawProcessor {
     }
     
     func resume() async {
-        guard !isRunning else { return }
+        guard !isRunning && !isStarting else { return }
         await start()
     }
     

@@ -59,6 +59,14 @@ final class CameraManager: NSObject {
         session.beginConfiguration()
         defer { session.commitConfiguration() }
 
+        // Remove existing inputs/outputs if session was previously configured
+        for input in session.inputs {
+            session.removeInput(input)
+        }
+        for output in session.outputs {
+            session.removeOutput(output)
+        }
+
         session.sessionPreset = .hd1920x1080
 
         // Camera input — prefer wide-angle back camera
@@ -71,29 +79,42 @@ final class CameraManager: NSObject {
         }
 
         // Lock and configure camera settings for consistent detection
-        try device.lockForConfiguration()
-        
-        // Frame rate: 30fps for consistent pipeline timing
-        let targetFPS = CMTimeMake(value: 1, timescale: 30)
-        device.activeVideoMinFrameDuration = targetFPS
-        device.activeVideoMaxFrameDuration = targetFPS
-        
-        // Disable HDR for consistent exposure
-        device.automaticallyAdjustsVideoHDREnabled = false
-        
-        // Lock exposure duration to 1/1000 sec (freeze insect motion)
-        let exposureDuration = CMTime(value: 1, timescale: 1000)
-        device.setExposureModeCustom(duration: exposureDuration, iso: device.iso) { _ in }
-        
-        // Lock focus at midpoint (prevent autofocus hunting during detection)
-        device.setFocusModeLocked(lensPosition: 0.5, completionHandler: nil)
-        
-        // Set white balance to continuous auto (adapts to outdoor lighting)
-        if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
-            device.whiteBalanceMode = .continuousAutoWhiteBalance
+        do {
+            try device.lockForConfiguration()
+            
+            // Frame rate: 30fps for consistent pipeline timing
+            let targetFPS = CMTimeMake(value: 1, timescale: 30)
+            device.activeVideoMinFrameDuration = targetFPS
+            device.activeVideoMaxFrameDuration = targetFPS
+            
+            // Disable HDR for consistent exposure (with capability check)
+            if device.automaticallyAdjustsVideoHDREnabled {
+                device.automaticallyAdjustsVideoHDREnabled = false
+            }
+            
+            // Lock exposure duration to 1/1000 sec (freeze insect motion)
+            if device.isExposureModeSupported(.custom) {
+                let exposureDuration = CMTime(value: 1, timescale: 1000)
+                let currentISO = AVCaptureDevice.currentISO
+                let clampedISO = max(device.activeFormat.minISO, min(currentISO, device.activeFormat.maxISO))
+                device.setExposureModeCustom(duration: exposureDuration, iso: clampedISO, completionHandler: nil)
+            }
+            
+            // Lock focus at midpoint (prevent autofocus hunting during detection)
+            if device.isFocusModeSupported(.locked) {
+                device.setFocusModeLocked(lensPosition: 0.5, completionHandler: nil)
+            }
+            
+            // Set white balance to continuous auto (adapts to outdoor lighting)
+            if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                device.whiteBalanceMode = .continuousAutoWhiteBalance
+            }
+            
+            device.unlockForConfiguration()
+        } catch {
+            // If camera configuration fails, log and continue with default settings
+            print("Camera configuration warning: \(error.localizedDescription)")
         }
-        
-        device.unlockForConfiguration()
 
         let input = try AVCaptureDeviceInput(device: device)
         guard session.canAddInput(input) else {

@@ -21,18 +21,18 @@ struct TrapjawApp: App {
                     
                     if timeWindow.isInOperatingHours {
                         await processor.start()
-                    } else {
-                        // Outside operating hours - set to waiting state
-                        // UI will show "PAUSED" based on timeWindow
                     }
                     
                     timeWindow.startMonitoring()
                 }
-                .onReceive(timeWindow.$isInOperatingHours) { isInHours in
+                .onChange(of: timeWindow.isInOperatingHours) { oldValue, newValue in
+                    // Only respond to actual changes, not initial values
+                    guard oldValue != newValue else { return }
+                    
                     Task { @MainActor in
-                        if isInHours && !processor.isRunning {
+                        if newValue && !processor.isRunning {
                             await processor.resume()
-                        } else if !isInHours && processor.isRunning {
+                        } else if !newValue && processor.isRunning {
                             processor.pause()
                         }
                     }
