@@ -70,11 +70,29 @@ final class CameraManager: NSObject {
             throw CameraError.noCameraAvailable
         }
 
-        // Lock and configure frame rate to 30fps for consistency with trapjaw defaults
+        // Lock and configure camera settings for consistent detection
         try device.lockForConfiguration()
+        
+        // Frame rate: 30fps for consistent pipeline timing
         let targetFPS = CMTimeMake(value: 1, timescale: 30)
         device.activeVideoMinFrameDuration = targetFPS
         device.activeVideoMaxFrameDuration = targetFPS
+        
+        // Disable HDR for consistent exposure
+        device.automaticallyAdjustsVideoHDREnabled = false
+        
+        // Lock exposure duration to 1/1000 sec (freeze insect motion)
+        let exposureDuration = CMTime(value: 1, timescale: 1000)
+        device.setExposureModeCustom(duration: exposureDuration, iso: device.iso) { _ in }
+        
+        // Lock focus at midpoint (prevent autofocus hunting during detection)
+        device.setFocusModeLocked(lensPosition: 0.5, completionHandler: nil)
+        
+        // Set white balance to continuous auto (adapts to outdoor lighting)
+        if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+            device.whiteBalanceMode = .continuousAutoWhiteBalance
+        }
+        
         device.unlockForConfiguration()
 
         let input = try AVCaptureDeviceInput(device: device)
