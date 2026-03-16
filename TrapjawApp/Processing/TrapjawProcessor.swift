@@ -34,6 +34,8 @@ final class TrapjawProcessor {
         case processing = "Processing"
         case stopping = "Stopping..."
         case failed = "Failed"
+        case paused = "Paused"
+        case waiting = "Waiting..."
     }
 
     // MARK: - Dependencies
@@ -196,6 +198,38 @@ final class TrapjawProcessor {
             UIApplication.shared.isIdleTimerDisabled = false
         }
         state = .idle
+    }
+    
+    // MARK: - Pause/Resume for Operating Hours
+    
+    func pause() {
+        guard isRunning else { return }
+        
+        state = .stopping
+        
+        // Stop camera first to stop new frames
+        cameraManager.stop()
+        
+        // Upload any remaining tracks before pausing
+        flushRemainingTracks()
+        
+        // Stop networking
+        dataStreamer.stop()
+        
+        // Flush and release pipeline
+        bridge?.flush()
+        bridge = nil
+        
+        isRunning = false
+        DispatchQueue.main.async {
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
+        state = .paused
+    }
+    
+    func resume() async {
+        guard !isRunning else { return }
+        await start()
     }
     
     private func flushRemainingTracks() {

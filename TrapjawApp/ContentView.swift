@@ -11,6 +11,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Bindable var processor: TrapjawProcessor
+    @ObservedObject var timeWindow: TimeWindowManager
 
     var body: some View {
         ZStack {
@@ -48,6 +49,14 @@ struct ContentView: View {
 
             Spacer()
 
+            // Operating hours indicator
+            if !timeWindow.isInOperatingHours {
+                Text("PAUSED")
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.orange)
+                    .padding(.trailing, 8)
+            }
+
             // Connection status
             HStack(spacing: 4) {
                 Circle()
@@ -74,6 +83,8 @@ struct ContentView: View {
         case .warmingUp: .orange
         case .processing: .green
         case .failed: .red
+        case .paused: .orange
+        case .waiting: .yellow
         }
     }
 

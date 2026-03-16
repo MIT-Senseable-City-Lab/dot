@@ -30,6 +30,7 @@
 		A10001E1 /* NetworkConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E4 /* NetworkConfig.swift */; };
 		A10001E2 /* DataStreamer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E5 /* DataStreamer.swift */; };
 		A10001E6 /* HTTPUploader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E7 /* HTTPUploader.swift */; };
+		A10001E8 /* TimeWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E9 /* TimeWindowManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -59,6 +60,7 @@
 		A10001E4 /* NetworkConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkConfig.swift; sourceTree = "<group>"; };
 		A10001E5 /* DataStreamer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStreamer.swift; sourceTree = "<group>"; };
 		A10001E7 /* HTTPUploader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPUploader.swift; sourceTree = "<group>"; };
+		A10001E9 /* TimeWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeWindowManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -128,6 +130,7 @@
 				A10001A5 /* TrapjawProcessor.swift */,
 				A10001A6 /* PerformanceMetrics.swift */,
 				A10001E3 /* TrackBuffer.swift */,
+				A10001E9 /* TimeWindowManager.swift */,
 			);
 			path = Processing;
 			sourceTree = "<group>";
@@ -259,6 +262,7 @@
 				A10001E1 /* NetworkConfig.swift in Sources */,
 				A10001E2 /* DataStreamer.swift in Sources */,
 				A10001E6 /* HTTPUploader.swift in Sources */,
+				A10001E8 /* TimeWindowManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
