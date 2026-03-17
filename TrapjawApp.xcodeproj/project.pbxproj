@@ -31,6 +31,8 @@
 		A10001E2 /* DataStreamer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E5 /* DataStreamer.swift */; };
 		A10001E6 /* HTTPUploader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E7 /* HTTPUploader.swift */; };
 		A10001E8 /* TimeWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E9 /* TimeWindowManager.swift */; };
+		A10001F0 /* FourKFrameBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001F1 /* FourKFrameBuffer.swift */; };
+		A10001F2 /* MetalDownscaler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001F3 /* MetalDownscaler.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -61,6 +63,8 @@
 		A10001E5 /* DataStreamer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStreamer.swift; sourceTree = "<group>"; };
 		A10001E7 /* HTTPUploader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPUploader.swift; sourceTree = "<group>"; };
 		A10001E9 /* TimeWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeWindowManager.swift; sourceTree = "<group>"; };
+		A10001F1 /* FourKFrameBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FourKFrameBuffer.swift; sourceTree = "<group>"; };
+		A10001F3 /* MetalDownscaler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalDownscaler.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -131,6 +135,8 @@
 				A10001A6 /* PerformanceMetrics.swift */,
 				A10001E3 /* TrackBuffer.swift */,
 				A10001E9 /* TimeWindowManager.swift */,
+				A10001F1 /* FourKFrameBuffer.swift */,
+				A10001F3 /* MetalDownscaler.swift */,
 			);
 			path = Processing;
 			sourceTree = "<group>";
@@ -263,6 +269,8 @@
 				A10001E2 /* DataStreamer.swift in Sources */,
 				A10001E6 /* HTTPUploader.swift in Sources */,
 				A10001E8 /* TimeWindowManager.swift in Sources */,
+				A10001F0 /* FourKFrameBuffer.swift in Sources */,
+				A10001F2 /* MetalDownscaler.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

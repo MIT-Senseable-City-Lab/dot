@@ -22,7 +22,7 @@ final class HTTPUploader {
     static let shared = HTTPUploader()
     
     private let config = NetworkConfig.shared
-    private let maxRetries = 3
+    private let maxRetries = 1
     private let baseDelay: TimeInterval = 1.0
     
     private let counterQueue = DispatchQueue(label: "com.trapjaw.uploadcounters")

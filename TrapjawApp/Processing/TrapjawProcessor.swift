@@ -44,10 +44,21 @@ final class TrapjawProcessor {
     let cameraManager = CameraManager()
     private var bridge: TrapjawBridge?
     private let metalDevice: MTLDevice?
+    
+    // MARK: - 4K Processing
+    
+    private var fourKBuffer: FourKFrameBuffer?
+    private var downscaler: MetalDownscaler?
+    private let processingWidth: Int = 1920
+    private let processingHeight: Int = 1080
+    
+    // Scale factor: 4K / 1080p = 2
+    private let cropScaleFactor: CGFloat = 2.0
 
     // MARK: - Processing State
 
     private var frameIndex: UInt64 = 0
+    private var warmupFramesProcessed: UInt64 = 0  // Counts frames during warmup
     private var startTime: CFAbsoluteTime = 0
     private let config: tj_config_t
     private let statsUpdateInterval: UInt64 = 30
@@ -76,6 +87,20 @@ final class TrapjawProcessor {
         cfg.camera_fov_degrees = 67.0
         cfg.debug_enabled = true
         self.config = cfg
+        
+        // Initialize 4K frame buffer (15 frames ~495MB)
+        self.fourKBuffer = FourKFrameBuffer(maxFrames: 15)
+        
+        // Initialize Metal downscaler for 4K→1080p
+        self.downscaler = MetalDownscaler(device: metalDevice)
+        
+        // Observe memory pressure to reduce buffer if needed
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMemoryWarning),
+            name: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil
+        )
         
         NotificationCenter.default.addObserver(
             self,
@@ -137,6 +162,11 @@ final class TrapjawProcessor {
             self?.uploadErrors = self?.httpUploader.uploadErrors ?? 0
         }
     }
+    
+    @objc private func handleMemoryWarning() {
+        // Reduce 4K buffer from 15 to 5 frames
+        fourKBuffer?.reduceCapacity(to: 5)
+    }
 
     // MARK: - Lifecycle
 
@@ -147,10 +177,12 @@ final class TrapjawProcessor {
         state = .configuring
         error = nil
         frameIndex = 0
+        warmupFramesProcessed = 0
         startTime = CFAbsoluteTimeGetCurrent()
         metrics.reset()
         trackBuffer.clear()
         networkConfig.startNewSession()
+        fourKBuffer?.clear()
 
         do {
             let bridge = try TrapjawBridge(config: config, device: metalDevice)
@@ -197,6 +229,7 @@ final class TrapjawProcessor {
         flushRemainingTracks()
         
         bridge = nil
+        fourKBuffer?.clear()
         isRunning = false
         DispatchQueue.main.async {
             UIApplication.shared.isIdleTimerDisabled = false
@@ -223,6 +256,9 @@ final class TrapjawProcessor {
         // Flush and release pipeline
         bridge?.flush()
         bridge = nil
+        
+        // Clear 4K buffer
+        fourKBuffer?.clear()
         
         isRunning = false
         DispatchQueue.main.async {
@@ -264,28 +300,56 @@ final class TrapjawProcessor {
         trackBuffer.setStitchedId(rawTrackId: crop.trackID, stitchedId: stitchedId)
         
         let trackId = crop.trackID
-        let bbox = crop.bbox
-        let width = crop.width
-        let height = crop.height
         let frameIndex = crop.frameIndex
         let timestamp = crop.timestamp
-        let pixelData = crop.pixelData
+        
+        // Scale bbox from1080p to 4K
+        let bbox1080p = crop.bbox
+        let bbox4K = CGRect(
+            x: bbox1080p.origin.x * cropScaleFactor,
+            y: bbox1080p.origin.y * cropScaleFactor,
+            width: bbox1080p.size.width * cropScaleFactor,
+            height: bbox1080p.size.height * cropScaleFactor
+        )
         
         jpegQueue.async { [weak self] in
             guard let self else { return }
             
-            guard let jpegData = self.convertToJPEG(pixelData, width: width, height: height) else {
+            // Get 4K frame from buffer - drop crop if frame not available
+            guard let pixelBuffer4K = self.fourKBuffer?.get(frameIndex: frameIndex) else {
+                // Frame was evicted from buffer, drop this crop
                 return
             }
             
+            // Extract crop from4K frame
+            guard let croppedData = self.extractCropFrom4K(
+                pixelBuffer: pixelBuffer4K,
+                bbox: bbox4K
+            ) else {
+                // Failed to extract crop, drop
+                return
+            }
+            
+            let cropWidth = UInt32(bbox4K.width)
+            let cropHeight = UInt32(bbox4K.height)
+            
+            guard let jpegData = self.convertToJPEG(
+                croppedData,
+                width: cropWidth,
+                height: cropHeight
+            ) else {
+                return
+            }
+            
+            // Resolution is 4K
             let resolution = StreamResolution(
-                width: Int(self.config.frame_width),
-                height: Int(self.config.frame_height)
+                width: Int(CameraManager.captureWidth),
+                height: Int(CameraManager.captureHeight)
             )
             
             if let trackToUpload = self.trackBuffer.addCrop(
                 trackId: trackId,
-                bbox: bbox,
+                bbox: bbox1080p,  // Keep 1080p bbox for telemetry consistency
                 frameIndex: frameIndex,
                 timestamp: timestamp,
                 jpegData: jpegData,
@@ -294,6 +358,44 @@ final class TrapjawProcessor {
                 self.uploadTrack(trackToUpload)
             }
         }
+    }
+    
+    /// Extract a cropped region from a 4K CVPixelBuffer.
+    private func extractCropFrom4K(pixelBuffer: CVPixelBuffer, bbox: CGRect) -> Data? {
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+        
+        // Clamp bbox to valid bounds
+        let clampedX = max(0, Int(bbox.origin.x))
+        let clampedY = max(0, Int(bbox.origin.y))
+        let clampedW = min(Int(bbox.size.width), width - clampedX)
+        let clampedH = min(Int(bbox.size.height), height - clampedY)
+        
+        guard clampedW > 0 && clampedH > 0 else { return nil }
+        
+        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+        
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
+        let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer)
+        
+        // Allocate cropped buffer
+        let croppedBytesPerRow = clampedW * 4  // BGRA = 4 bytes per pixel
+        let croppedData = UnsafeMutablePointer<UInt8>.allocate(capacity: croppedBytesPerRow * clampedH)
+        defer { croppedData.deallocate() }
+        
+        // Copy cropped region row by row
+        for y in 0..<clampedH {
+            let srcOffset = (clampedY + y) * bytesPerRow + clampedX * 4
+            let dstOffset = y * croppedBytesPerRow
+            memcpy(
+                croppedData + dstOffset,
+                baseAddress!.assumingMemoryBound(to: UInt8.self) + srcOffset,
+                croppedBytesPerRow
+            )
+        }
+        
+        return Data(bytes: croppedData, count: croppedBytesPerRow * clampedH)
     }
     
     private func convertToJPEG(_ pixelData: Data, width: UInt32, height: UInt32) -> Data? {
@@ -360,12 +462,15 @@ final class TrapjawProcessor {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.metrics.updateFromStats(stats)
+            
+            // Use warmupFramesProcessed for warmup detection (frames_processed is 0 during warmup)
             self.metrics.updateWarmupStatus(
-                framesProcessed: stats.frames_processed,
+                framesProcessed: self.warmupFramesProcessed,
                 warmupFrames: self.config.bg_warmup_frames
             )
 
-            if stats.frames_processed >= UInt64(self.config.bg_warmup_frames) && self.state == .warmingUp {
+            // Transition from warmingUp to processing when warmup complete
+            if self.warmupFramesProcessed >= UInt64(self.config.bg_warmup_frames) && self.state == .warmingUp {
                 self.state = .processing
             }
         }
@@ -401,16 +506,49 @@ extension TrapjawProcessor: CameraManagerDelegate {
             self?.metrics.recordCameraFrame()
         }
 
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        guard let pixelBuffer4K = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         let timestamp = CMTimeGetSeconds(pts)
 
         let currentIndex = frameIndex
         frameIndex += 1
+        
+        // Increment warmup frame counter (for warmup detection)
+        warmupFramesProcessed += 1
+        
+        // Store 4K frame in buffer
+        fourKBuffer?.add(pixelBuffer: pixelBuffer4K, frameIndex: currentIndex)
+        
+        // Downscale to 1080p for processing
+        guard let downscaler,
+              let pixelBuffer1080p = downscaler.downscale(inputBuffer: pixelBuffer4K, quality: .average) else {
+            // Fallback: process 4K directly if downscaling fails (will be slower)
+            let result = bridge.processFrame(
+                pixelBuffer: pixelBuffer4K,
+                frameIndex: currentIndex,
+                timestamp: timestamp
+            )
+            
+            if result == TJ_OK || result == TJ_ERROR_NOT_READY {
+                DispatchQueue.main.async { [weak self] in
+                    self?.metrics.recordProcessedFrame()
+                }
+            }
+            
+            if currentIndex % statsUpdateInterval == 0 {
+                updateStats()
+            }
+            
+            if currentIndex % terminationCheckInterval == 0 {
+                checkTerminatedTracks()
+            }
+            return
+        }
 
+        // Process 1080p frame
         let result = bridge.processFrame(
-            pixelBuffer: pixelBuffer,
+            pixelBuffer: pixelBuffer1080p,
             frameIndex: currentIndex,
             timestamp: timestamp
         )
