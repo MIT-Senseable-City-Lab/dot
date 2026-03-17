@@ -59,6 +59,7 @@ final class TrapjawProcessor {
 
     private var frameIndex: UInt64 = 0
     private var warmupFramesProcessed: UInt64 = 0  // Counts frames during warmup
+    private var lastProcessedFrame: UInt64 = 0     // For detecting out-of-order processing
     private var startTime: CFAbsoluteTime = 0
     private let config: tj_config_t
     private let statsUpdateInterval: UInt64 = 30
@@ -461,7 +462,7 @@ final class TrapjawProcessor {
         dataStreamer.sendTrackTelemetry(payload)
         
         let jpegDataArray = track.crops.map { $0.jpegData }
-        httpUploader.uploadCrops(trackId: trackIdString, crops: jpegDataArray)
+        httpUploader.uploadCrops(trackId: trackIdString, crops: jpegDataArray, startIndex: track.startIndex)
     }
 
     private func updateStats(warmupCount: UInt64) {
@@ -553,6 +554,15 @@ extension TrapjawProcessor: CameraManagerDelegate {
                 print("[ERROR] Downscale failed for frame \(currentIndex)")
                 return
             }
+            
+            // Diagnostic: Check frame processing order
+            if currentIndex <= self.lastProcessedFrame {
+                print("[ORDER] ⚠️ OUT OF ORDER: Frame \(currentIndex) processed after frame \(self.lastProcessedFrame)")
+            } else if currentIndex > self.lastProcessedFrame + 1 {
+                let gap = currentIndex - self.lastProcessedFrame - 1
+                print("[ORDER] Gap detected: Frame \(currentIndex) after \(self.lastProcessedFrame) (missed \(gap) frames)")
+            }
+            self.lastProcessedFrame = currentIndex
             
             // Stage: Trapjaw processing
             let t4 = CFAbsoluteTimeGetCurrent()

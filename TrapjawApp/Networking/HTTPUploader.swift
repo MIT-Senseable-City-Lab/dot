@@ -44,6 +44,7 @@ final class HTTPUploader {
     func uploadCrops(
         trackId: String,
         crops: [Data],
+        startIndex: Int = 0,
         retryCount: Int = 0,
         completion: ((Bool) -> Void)? = nil
     ) {
@@ -79,7 +80,7 @@ final class HTTPUploader {
         var body = Data()
         
         for (index, jpegData) in crops.enumerated() {
-            let filename = String(format: "frame_%06d.jpg", index)
+            let filename = String(format: "frame_%06d.jpg", startIndex + index)
             
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
             body.append("Content-Disposition: form-data; name=\"files\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
