@@ -71,6 +71,11 @@ final class TrapjawProcessor {
     private let trackBuffer = TrackBuffer.shared
     private let networkConfig = NetworkConfig.shared
     
+    // MARK: - Timing & Diagnostics
+    
+    private let timing = TimingMetrics()
+    private let timingLogInterval: UInt64 = 60
+    
     // MARK: - JPEG Conversion Queue
     
     private let jpegQueue = DispatchQueue(label: "com.trapjaw.jpeg", qos: .utility, attributes: .concurrent)
@@ -88,8 +93,8 @@ final class TrapjawProcessor {
         cfg.debug_enabled = true
         self.config = cfg
         
-        // Initialize 4K frame buffer (15 frames ~495MB)
-        self.fourKBuffer = FourKFrameBuffer(maxFrames: 15)
+        // Initialize 4K frame buffer (10 frames ~330MB) - reduced for memory efficiency
+        self.fourKBuffer = FourKFrameBuffer(maxFrames: 10)
         
         // Initialize Metal downscaler for 4K→1080p
         self.downscaler = MetalDownscaler(device: metalDevice)
@@ -164,7 +169,7 @@ final class TrapjawProcessor {
     }
     
     @objc private func handleMemoryWarning() {
-        // Reduce 4K buffer from 15 to 5 frames
+        // Reduce 4K buffer from 10 to 5 frames on memory warning
         fourKBuffer?.reduceCapacity(to: 5)
     }
 
@@ -194,6 +199,10 @@ final class TrapjawProcessor {
 
             bridge.onDebugFrame = { [weak self] (pipelineMs, activeTracks, frameIdx) in
                 guard let self else { return }
+                // Debug logging every 30 frames
+                if frameIdx % 30 == 0 {
+                    print("[DEBUG_FRAME] idx=\(frameIdx), activeTracks=\(activeTracks), pipelineMs=\(pipelineMs)")
+                }
                 DispatchQueue.main.async {
                     self.metrics.updateActiveTrackCount(activeTracks)
                 }
@@ -455,22 +464,23 @@ final class TrapjawProcessor {
         httpUploader.uploadCrops(trackId: trackIdString, crops: jpegDataArray)
     }
 
-    private func updateStats() {
+    private func updateStats(warmupCount: UInt64) {
         guard let bridge else { return }
         let stats = bridge.getStats()
+        
+        print("[STATS] warmupCount=\(warmupCount), threshold=\(config.bg_warmup_frames), state=\(state.rawValue)")
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.metrics.updateFromStats(stats)
             
-            // Use warmupFramesProcessed for warmup detection (frames_processed is 0 during warmup)
             self.metrics.updateWarmupStatus(
-                framesProcessed: self.warmupFramesProcessed,
+                framesProcessed: warmupCount,
                 warmupFrames: self.config.bg_warmup_frames
             )
 
-            // Transition from warmingUp to processing when warmup complete
-            if self.warmupFramesProcessed >= UInt64(self.config.bg_warmup_frames) && self.state == .warmingUp {
+            if warmupCount >= UInt64(self.config.bg_warmup_frames) && self.state == .warmingUp {
+                print("[STATE] Transitioning: \(self.state.rawValue) → processing")
                 self.state = .processing
             }
         }
@@ -500,8 +510,11 @@ final class TrapjawProcessor {
 
 extension TrapjawProcessor: CameraManagerDelegate {
     func cameraManager(_ manager: CameraManager, didOutput sampleBuffer: CMSampleBuffer) {
-        guard let bridge, isRunning else { return }
-
+        guard let _ = bridge, isRunning else { return }
+        
+        // Start frame timing
+        timing.startFrame()
+        
         DispatchQueue.main.async { [weak self] in
             self?.metrics.recordCameraFrame()
         }
@@ -517,18 +530,39 @@ extension TrapjawProcessor: CameraManagerDelegate {
         // Increment warmup frame counter (for warmup detection)
         warmupFramesProcessed += 1
         
-        // Store 4K frame in buffer
-        fourKBuffer?.add(pixelBuffer: pixelBuffer4K, frameIndex: currentIndex)
+        // Debug logging every 30 frames
+        if currentIndex % 30 == 0 {
+            print("[FRAME] idx=\(currentIndex), warmupCount=\(warmupFramesProcessed), state=\(state.rawValue)")
+        }
         
-        // Downscale to 1080p for processing
-        guard let downscaler,
-              let pixelBuffer1080p = downscaler.downscale(inputBuffer: pixelBuffer4K, quality: .average) else {
-            // Fallback: process 4K directly if downscaling fails (will be slower)
-            let result = bridge.processFrame(
-                pixelBuffer: pixelBuffer4K,
+        // Stage: Buffer storage
+        let t0 = CFAbsoluteTimeGetCurrent()
+        fourKBuffer?.add(pixelBuffer: pixelBuffer4K, frameIndex: currentIndex)
+        let t1 = CFAbsoluteTimeGetCurrent()
+        timing.record(stage: &timing.bufferStore, durationMs: (t1 - t0) * 1000)
+        
+        // Async downscale 4K → 1080p
+        let t2 = CFAbsoluteTimeGetCurrent()
+        downscaler?.downscale(inputBuffer: pixelBuffer4K, quality: .average) { [weak self] pixelBuffer1080p in
+            guard let self = self else { return }
+            
+            let t3 = CFAbsoluteTimeGetCurrent()
+            self.timing.record(stage: &self.timing.downscale, durationMs: (t3 - t2) * 1000)
+            
+            guard let pixelBuffer1080p = pixelBuffer1080p else {
+                print("[ERROR] Downscale failed for frame \(currentIndex)")
+                return
+            }
+            
+            // Stage: Trapjaw processing
+            let t4 = CFAbsoluteTimeGetCurrent()
+            let result = self.bridge?.processFrame(
+                pixelBuffer: pixelBuffer1080p,
                 frameIndex: currentIndex,
                 timestamp: timestamp
             )
+            let t5 = CFAbsoluteTimeGetCurrent()
+            self.timing.record(stage: &self.timing.trapjawProcess, durationMs: (t5 - t4) * 1000)
             
             if result == TJ_OK || result == TJ_ERROR_NOT_READY {
                 DispatchQueue.main.async { [weak self] in
@@ -536,35 +570,19 @@ extension TrapjawProcessor: CameraManagerDelegate {
                 }
             }
             
-            if currentIndex % statsUpdateInterval == 0 {
-                updateStats()
+            // End frame timing
+            let _ = self.timing.endFrame()
+            
+            // Log timing summary every 60 frames
+            self.timing.logSummaryIfNeeded(frameIndex: currentIndex, bufferDepth: self.fourKBuffer?.currentCount ?? 0)
+
+            if currentIndex % self.statsUpdateInterval == 0 {
+                self.updateStats(warmupCount: self.warmupFramesProcessed)
             }
             
-            if currentIndex % terminationCheckInterval == 0 {
-                checkTerminatedTracks()
+            if currentIndex % self.terminationCheckInterval == 0 {
+                self.checkTerminatedTracks()
             }
-            return
-        }
-
-        // Process 1080p frame
-        let result = bridge.processFrame(
-            pixelBuffer: pixelBuffer1080p,
-            frameIndex: currentIndex,
-            timestamp: timestamp
-        )
-
-        if result == TJ_OK || result == TJ_ERROR_NOT_READY {
-            DispatchQueue.main.async { [weak self] in
-                self?.metrics.recordProcessedFrame()
-            }
-        }
-
-        if currentIndex % statsUpdateInterval == 0 {
-            updateStats()
-        }
-        
-        if currentIndex % terminationCheckInterval == 0 {
-            checkTerminatedTracks()
         }
     }
 

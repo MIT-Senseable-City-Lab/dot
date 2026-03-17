@@ -33,6 +33,7 @@
 		A10001E8 /* TimeWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E9 /* TimeWindowManager.swift */; };
 		A10001F0 /* FourKFrameBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001F1 /* FourKFrameBuffer.swift */; };
 		A10001F2 /* MetalDownscaler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001F3 /* MetalDownscaler.swift */; };
+		A10001F6 /* TimingMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001F7 /* TimingMetrics.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -65,6 +66,7 @@
 		A10001E9 /* TimeWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeWindowManager.swift; sourceTree = "<group>"; };
 		A10001F1 /* FourKFrameBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FourKFrameBuffer.swift; sourceTree = "<group>"; };
 		A10001F3 /* MetalDownscaler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalDownscaler.swift; sourceTree = "<group>"; };
+		A10001F7 /* TimingMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimingMetrics.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -137,6 +139,7 @@
 				A10001E9 /* TimeWindowManager.swift */,
 				A10001F1 /* FourKFrameBuffer.swift */,
 				A10001F3 /* MetalDownscaler.swift */,
+				A10001F7 /* TimingMetrics.swift */,
 			);
 			path = Processing;
 			sourceTree = "<group>";
@@ -271,6 +274,7 @@
 				A10001E8 /* TimeWindowManager.swift in Sources */,
 				A10001F0 /* FourKFrameBuffer.swift in Sources */,
 				A10001F2 /* MetalDownscaler.swift in Sources */,
+				A10001F6 /* TimingMetrics.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

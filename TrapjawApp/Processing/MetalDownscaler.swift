@@ -20,6 +20,8 @@ enum DownscaleQuality {
     case area       // Best quality, slightly slower
 }
 
+typealias DownscaleCompletion = (CVPixelBuffer?) -> Void
+
 final class MetalDownscaler {
     
     // MARK: - Properties
@@ -74,7 +76,7 @@ final class MetalDownscaler {
         // Create output buffer pool
         createOutputBufferPool()
         
-        logger.info("MetalDownscaler initialized for 4K→1080p")
+        logger.info("MetalDownscaler initialized for 4K→1080p (async)")
     }
     
     // MARK: - Shader Source
@@ -141,21 +143,22 @@ final class MetalDownscaler {
         return try device.makeLibrary(source: shaderSource, options: nil)
     }
     
-    // MARK: - Public API
+    // MARK: - Public API (Async)
     
-    /// Downscale a 4K CVPixelBuffer to 1080p.
+    /// Asynchronously downscale a 4K CVPixelBuffer to 1080p.
     /// - Parameters:
     ///   - inputBuffer: 4K input buffer (3840x2160)
     ///   - quality: Downscaling quality setting
-    /// - Returns: 1080p CVPixelBuffer, or nil on failure
-    func downscale(inputBuffer: CVPixelBuffer, quality: DownscaleQuality = .average) -> CVPixelBuffer? {
+    ///   - completion: Called on completion with 1080p buffer or nil on failure
+    func downscale(inputBuffer: CVPixelBuffer, quality: DownscaleQuality = .average, completion: @escaping DownscaleCompletion) {
         let inputWidth = CVPixelBufferGetWidth(inputBuffer)
         let inputHeight = CVPixelBufferGetHeight(inputBuffer)
         
         // Validate input dimensions
         guard inputWidth == 3840 && inputHeight == 2160 else {
             logger.warning("Input buffer is not 4K: \(inputWidth)x\(inputHeight)")
-            return nil
+            completion(nil)
+            return
         }
         
         // Create output buffer
@@ -164,14 +167,16 @@ final class MetalDownscaler {
         
         guard status == kCVReturnSuccess, let output = outputBuffer else {
             logger.error("Failed to create output pixel buffer")
-            return nil
+            completion(nil)
+            return
         }
         
         // Create Metal textures
         guard let inputTexture = createTexture(from: inputBuffer, format: .bgra8Unorm),
               let outputTexture = createTexture(from: output, format: .bgra8Unorm) else {
             logger.error("Failed to create Metal textures")
-            return nil
+            completion(nil)
+            return
         }
         
         // Select pipeline based on quality
@@ -189,7 +194,8 @@ final class MetalDownscaler {
         guard let commandBuffer = commandQueue.makeCommandBuffer(),
               let computeEncoder = commandBuffer.makeComputeCommandEncoder() else {
             logger.error("Failed to create command buffer")
-            return nil
+            completion(nil)
+            return
         }
         
         computeEncoder.setComputePipelineState(pipelineState)
@@ -207,10 +213,21 @@ final class MetalDownscaler {
         computeEncoder.dispatchThreadgroups(threadGroups, threadsPerThreadgroup: threadGroupSize)
         computeEncoder.endEncoding()
         
-        commandBuffer.commit()
-        commandBuffer.waitUntilCompleted()
+        // Add async completion handler
+        commandBuffer.addCompletedHandler { _ in
+            
+            // Check if command buffer completed successfully
+            if commandBuffer.status == .completed {
+                completion(output)
+            } else {
+                let statusValue = commandBuffer.status.rawValue
+                logger.error("Metal command buffer failed with status: \(statusValue)")
+                completion(nil)
+            }
+        }
         
-        return output
+        // Schedule command buffer
+        commandBuffer.commit()
     }
     
     // MARK: - Private Helpers
