@@ -105,40 +105,21 @@ struct ContentView: View {
                 metricTile(label: "PROC FPS", value: String(format: "%.1f", metrics.processingFPS))
             }
 
-            Divider().background(.gray)
-
             // Pipeline timing
             HStack(spacing: 24) {
                 metricTile(label: "AVG MS", value: String(format: "%.2f", metrics.avgPipelineMs))
-                metricTile(label: "PEAK MS", value: String(format: "%.2f", metrics.maxPipelineMs))
-            }
-
-            HStack(spacing: 24) {
                 metricTile(label: "GPU MS", value: String(format: "%.2f", metrics.avgGpuMs))
-                metricTile(label: "CPU MS", value: String(format: "%.2f", metrics.avgCpuMs))
             }
-
-            Divider().background(.gray)
 
             // Detection stats
             HStack(spacing: 24) {
                 metricTile(label: "TRACKS", value: "\(metrics.activeTrackCount)")
-                metricTile(label: "TOTAL", value: "\(metrics.totalTracks)")
-            }
-
-            HStack(spacing: 24) {
                 metricTile(label: "CROPS", value: "\(metrics.totalCrops)")
-                metricTile(label: "FRAMES", value: "\(metrics.totalFrames)")
             }
 
             // Network stats
             HStack(spacing: 24) {
-                metricTile(label: "SENT", value: "\(processor.tracksSent)")
                 metricTile(label: "PENDING", value: "\(processor.pendingUploads)")
-            }
-
-            HStack(spacing: 24) {
-                metricTile(label: "FAILED", value: "\(processor.uploadErrors)")
                 metricTile(label: "BUFFERED", value: "\(TrackBuffer.shared.getTotalBufferedCropCount())")
             }
 

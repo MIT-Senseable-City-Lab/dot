@@ -46,6 +46,11 @@ final class PerformanceMetrics {
     /// Whether the pipeline is currently in warmup (background model learning).
     private(set) var isWarmingUp: Bool = true
 
+    // MARK: - GPU Time Tracking (Swift-side, not from tj_stats_t)
+
+    private var gpuTimeSamples: [Double] = []
+    private let maxGpuSamples = 60  // Rolling average over last 60 frames
+
     // MARK: - Internal Tracking
 
     private var cameraFrameTimestamps: [CFAbsoluteTime] = []
@@ -71,14 +76,26 @@ final class PerformanceMetrics {
     }
 
     /// Update metrics from trapjaw statistics.
+    /// Note: avgGpuMs is updated separately via updateGpuTime() since tj_stats_t doesn't populate it.
     func updateFromStats(_ stats: tj_stats_t) {
         totalFrames = stats.frames_processed
         totalCrops = stats.total_crops_emitted
         totalTracks = stats.total_tracks_created
         avgPipelineMs = stats.avg_pipeline_time_ms
         maxPipelineMs = stats.max_pipeline_time_ms
-        avgGpuMs = stats.avg_gpu_time_ms
+        // avgGpuMs is updated via updateGpuTime() - not from stats (always 0 in tj_stats_t)
         avgCpuMs = stats.avg_cpu_time_ms
+    }
+
+    /// Update GPU time from Swift-side timing (downscale + trapjaw pipeline).
+    /// Called from onDebugFrame callback with combined GPU timing.
+    func updateGpuTime(downscaleMs: Double, trapjawPipelineMs: Double) {
+        let totalGpuMs = downscaleMs + trapjawPipelineMs
+        gpuTimeSamples.append(totalGpuMs)
+        if gpuTimeSamples.count > maxGpuSamples {
+            gpuTimeSamples.removeFirst()
+        }
+        avgGpuMs = gpuTimeSamples.reduce(0, +) / Double(gpuTimeSamples.count)
     }
 
     /// Update the active track count.

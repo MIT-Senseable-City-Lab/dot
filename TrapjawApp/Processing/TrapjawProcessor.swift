@@ -12,6 +12,10 @@ import AVFoundation
 import Metal
 import CoreVideo
 import UIKit
+import CoreImage
+
+// Shared CIContext for efficient crop extraction (preserves color accuracy)
+private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
 
 @Observable
 final class TrapjawProcessor {
@@ -205,6 +209,9 @@ final class TrapjawProcessor {
                     print("[DEBUG_FRAME] idx=\(frameIdx), activeTracks=\(activeTracks), pipelineMs=\(pipelineMs)")
                 }
                 DispatchQueue.main.async {
+                    // Update combined GPU time: downscale + trapjaw pipeline
+                    let downscaleMs = self.timing.downscale.lastMs
+                    self.metrics.updateGpuTime(downscaleMs: downscaleMs, trapjawPipelineMs: pipelineMs)
                     self.metrics.updateActiveTrackCount(activeTracks)
                 }
             }
@@ -331,23 +338,12 @@ final class TrapjawProcessor {
                 return
             }
             
-            // Extract crop from4K frame
-            guard let croppedData = self.extractCropFrom4K(
+            // Extract crop from 4K frame and convert to JPEG (CoreImage preserves color accuracy)
+            guard let jpegData = self.extractCropFrom4K(
                 pixelBuffer: pixelBuffer4K,
                 bbox: bbox4K
             ) else {
                 // Failed to extract crop, drop
-                return
-            }
-            
-            let cropWidth = UInt32(bbox4K.width)
-            let cropHeight = UInt32(bbox4K.height)
-            
-            guard let jpegData = self.convertToJPEG(
-                croppedData,
-                width: cropWidth,
-                height: cropHeight
-            ) else {
                 return
             }
             
@@ -370,68 +366,37 @@ final class TrapjawProcessor {
         }
     }
     
-    /// Extract a cropped region from a 4K CVPixelBuffer.
+    /// Extract a cropped region from a 4K CVPixelBuffer using CoreImage for accurate color.
+    /// This preserves the camera's color space metadata (fixes pink/purple color cast).
     private func extractCropFrom4K(pixelBuffer: CVPixelBuffer, bbox: CGRect) -> Data? {
-        let width = CVPixelBufferGetWidth(pixelBuffer)
-        let height = CVPixelBufferGetHeight(pixelBuffer)
+        let bufferHeight = CVPixelBufferGetHeight(pixelBuffer)
         
         // Clamp bbox to valid bounds
-        let clampedX = max(0, Int(bbox.origin.x))
-        let clampedY = max(0, Int(bbox.origin.y))
-        let clampedW = min(Int(bbox.size.width), width - clampedX)
-        let clampedH = min(Int(bbox.size.height), height - clampedY)
+        let clampedX = max(0, CGFloat(bbox.origin.x))
+        let clampedY = max(0, CGFloat(bbox.origin.y))
+        let clampedW = min(CGFloat(bbox.size.width), CGFloat(CVPixelBufferGetWidth(pixelBuffer)) - clampedX)
+        let clampedH = min(CGFloat(bbox.size.height), CGFloat(bufferHeight) - clampedY)
         
         guard clampedW > 0 && clampedH > 0 else { return nil }
         
-        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+        // Create CIImage from pixel buffer (preserves camera color space)
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
         
-        let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
-        let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer)
+        // Flip Y coordinate (CoreImage uses bottom-left origin, UIKit uses top-left)
+        let flippedY = CGFloat(bufferHeight) - clampedY - clampedH
+        let cropRect = CGRect(x: clampedX, y: flippedY, width: clampedW, height: clampedH)
         
-        // Allocate cropped buffer
-        let croppedBytesPerRow = clampedW * 4  // BGRA = 4 bytes per pixel
-        let croppedData = UnsafeMutablePointer<UInt8>.allocate(capacity: croppedBytesPerRow * clampedH)
-        defer { croppedData.deallocate() }
+        // Crop the image
+        let croppedImage = ciImage.cropped(to: cropRect)
         
-        // Copy cropped region row by row
-        for y in 0..<clampedH {
-            let srcOffset = (clampedY + y) * bytesPerRow + clampedX * 4
-            let dstOffset = y * croppedBytesPerRow
-            memcpy(
-                croppedData + dstOffset,
-                baseAddress!.assumingMemoryBound(to: UInt8.self) + srcOffset,
-                croppedBytesPerRow
-            )
+        // Render to CGImage using shared context (GPU-accelerated)
+        guard let cgImage = sharedCIContext.createCGImage(croppedImage, from: croppedImage.extent) else {
+            return nil
         }
         
-        return Data(bytes: croppedData, count: croppedBytesPerRow * clampedH)
-    }
-    
-    private func convertToJPEG(_ pixelData: Data, width: UInt32, height: UInt32) -> Data? {
-        let cgImage = createCGImage(from: pixelData, width: width, height: height)
+        // Convert to JPEG with maximum quality (no compression artifacts)
         let uiImage = UIImage(cgImage: cgImage)
-        return uiImage.jpegData(compressionQuality: 0.7)
-    }
-    
-    private func createCGImage(from pixelData: Data, width: UInt32, height: UInt32) -> CGImage {
-        let bytesPerPixel = 4
-        let bytesPerRow = Int(width) * bytesPerPixel
-        
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)
-        
-        let context = CGContext(
-            data: UnsafeMutablePointer(mutating: (pixelData as NSData).bytes.bindMemory(to: UInt8.self, capacity: pixelData.count)),
-            width: Int(width),
-            height: Int(height),
-            bitsPerComponent: 8,
-            bytesPerRow: bytesPerRow,
-            space: colorSpace,
-            bitmapInfo: bitmapInfo.rawValue
-        )!
-        
-        return context.makeImage()!
+        return uiImage.jpegData(compressionQuality: 1.0)
     }
     
     // MARK: - Track Upload
