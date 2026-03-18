@@ -104,9 +104,9 @@ final class CameraManager: NSObject {
                 device.setExposureModeCustom(duration: exposureDuration, iso: clampedISO, completionHandler: nil)
             }
             
-            // Lock focus at midpoint (prevent autofocus hunting during detection)
-            if device.isFocusModeSupported(.locked) {
-                device.setFocusModeLocked(lensPosition: 0.5, completionHandler: nil)
+            // Use continuous autofocus to adapt to scene distance
+            if device.isFocusModeSupported(.continuousAutoFocus) {
+                device.focusMode = .continuousAutoFocus
             }
             
             // Set white balance to continuous auto (adapts to outdoor lighting)
