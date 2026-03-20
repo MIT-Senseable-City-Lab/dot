@@ -17,6 +17,9 @@ struct TrapjawApp: App {
         WindowGroup {
             ContentView(processor: processor, timeWindow: timeWindow)
                 .task {
+                    // Keep screen always on for continuous operation (including overnight pause)
+                    UIApplication.shared.isIdleTimerDisabled = true
+                    
                     timeWindow.checkAndUpdate()
                     
                     if timeWindow.isInOperatingHours {

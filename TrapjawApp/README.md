@@ -13,8 +13,9 @@ iOS application for real-time insect detection and tracking using the trapjaw li
 - **Network streaming** to Pi server via HTTP
 - **Time-based operation** (5AM - 10PM local time)
 - **Automatic pause/resume** at operating hours boundaries
+- **Scheduled cool-down periods** to prevent thermal throttling
 - **Memory pressure handling** with automatic buffer reduction
-- **Screen always-on** during processing
+- **Screen always-on** (including overnight pause for connection maintenance)
 
 ## Architecture
 
@@ -57,6 +58,7 @@ TrapjawBridge (GPU detection, tracking at 1080p)
 | `TrackBuffer` | `Processing/TrackBuffer.swift` | Thread-safe in-memory crop buffering |
 | `TimingMetrics` | `Processing/TimingMetrics.swift` | Stage-by-stage timing diagnostics |
 | `TimeWindowManager` | `Processing/TimeWindowManager.swift` | Operating hours (5AM-10PM), power-efficient |
+| `CoolDownManager` | `Processing/CoolDownManager.swift` | Thermal management, scheduled cool-down periods |
 | `NetworkConfig` | `Networking/NetworkConfig.swift` | Server URL, device ID, DOT session |
 | `DataStreamer` | `Networking/DataStreamer.swift` | Heartbeat (10s), telemetry POST |
 | `HTTPUploader` | `Networking/HTTPUploader.swift` | Multipart JPEG upload with retry |
@@ -185,6 +187,7 @@ TrapjawApp/
 │   ├── TrackBuffer.swift             # Thread-safe crop buffering
 │   ├── TimingMetrics.swift           # Stage-by-stage timing diagnostics
 │   ├── TimeWindowManager.swift       # Operating hours (5AM-10PM)
+│   ├── CoolDownManager.swift         # Thermal management, scheduled breaks
 │   └── PerformanceMetrics.swift      # FPS, timing stats
 ├── Networking/
 │   ├── NetworkConfig.swift           # Server URL, device ID
@@ -290,6 +293,70 @@ The app displays a minimal heads-up dashboard:
    - Reinitializes trapjaw context
    - Starts camera
    - Resumes processing
+
+## Scheduled Cool-Down Periods
+
+To prevent thermal throttling on iPhone models with limited GPU performance (e.g., iPhone XR), the app implements scheduled cool-down periods.
+
+### Schedule
+
+- **Duration**: 5 minutes every hour
+- **Time window**: :55 to :00 (e.g., 12:55-13:00, 13:55-14:00)
+- **Behavior**: Processing pauses, camera continues running
+- **UI indicator**: "COOLING DOWN" appears in status bar (cyan color)
+
+### What Happens During Cool-Down
+
+```
+Normal Processing          Cool-Down Period          Resume Processing
+       │                          │                          │
+       ▼                          ▼                          ▼
+   ┌──────────┐              ┌──────────┐              ┌──────────┐
+   │ Process  │    :55       │ Pause    │    :00       │ Process  │
+   │ frames   │─────────────▶│ processing──────────────▶│ frames   │
+   │ (30fps)  │              │ (0fps)   │              │ (30fps)  │
+   └──────────┘              └──────────┘              └──────────┘
+        │                         │                          │
+        │                    ┌────┴────┐                     │
+        │                    │         │                     │
+        │                    ▼         ▼                     │
+        │              Camera    Pending uploads              │
+        │              continues   complete                   │
+        │              running     in background              │
+        │                    │         │                     │
+        └────────────────────┴─────────┴─────────────────────┘
+```
+
+### Implementation
+
+| Aspect | Details |
+|--------|---------|
+| Buffer behavior | 4K frame buffer continues accepting frames (10 frames) |
+| Crop processing | Paused - no new crops extracted during cool-down |
+| Network uploads | Continue in background (pending uploads complete) |
+| Camera state | Running (ready for immediate resume) |
+| State | `.coolingDown` with cyan status indicator |
+
+### Manual Override
+
+The cool-down manager supports manual control for testing or emergency situations:
+
+```swift
+// Skip current cool-down and resume immediately
+CoolDownManager.shared.skipCurrentCoolDown()
+
+// Force an immediate cool-down period
+CoolDownManager.shared.forceCoolDown(duration: 300) // 5 minutes
+
+// Disable cool-down scheduling entirely
+CoolDownManager.shared.isEnabled = false
+```
+
+### Files
+
+- `CoolDownManager.swift` - Schedule monitoring and state management
+- `TrapjawProcessor.swift` - Skips frame processing during cool-down
+- `ContentView.swift` - UI indicator for cool-down state
 
 ## Dependencies
 

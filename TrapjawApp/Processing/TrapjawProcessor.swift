@@ -17,8 +17,8 @@ import CoreImage
 // Shared CIContext for efficient crop extraction (preserves color accuracy)
 private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
 
-@Observable
-final class TrapjawProcessor {
+    @Observable
+    final class TrapjawProcessor {
 
     // MARK: - Public State
 
@@ -31,6 +31,7 @@ final class TrapjawProcessor {
     private(set) var tracksSent: Int = 0
     private(set) var pendingUploads: Int = 0
     private(set) var uploadErrors: Int = 0
+    private(set) var isCoolingDown: Bool = false
 
     enum ProcessorState: String {
         case idle = "Idle"
@@ -41,6 +42,7 @@ final class TrapjawProcessor {
         case failed = "Failed"
         case paused = "Paused"
         case waiting = "Waiting..."
+        case coolingDown = "Cooling Down"
     }
 
     // MARK: - Dependencies
@@ -112,6 +114,14 @@ final class TrapjawProcessor {
             object: nil
         )
         
+        // Observe cool-down state changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(coolDownStateChanged),
+            name: .coolDownStateChanged,
+            object: nil
+        )
+        
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(connectionStatusChanged),
@@ -140,13 +150,7 @@ final class TrapjawProcessor {
     
     deinit {
         NotificationCenter.default.removeObserver(self)
-        if Thread.isMainThread {
-            UIApplication.shared.isIdleTimerDisabled = false
-        } else {
-            DispatchQueue.main.sync {
-                UIApplication.shared.isIdleTimerDisabled = false
-            }
-        }
+        // Note: Screen idle timer is now managed at app level (always disabled)
     }
     
     @objc private func connectionStatusChanged() {
@@ -176,6 +180,24 @@ final class TrapjawProcessor {
     @objc private func handleMemoryWarning() {
         // Reduce 4K buffer from 10 to 5 frames on memory warning
         fourKBuffer?.reduceCapacity(to: 5)
+    }
+    
+    @objc private func coolDownStateChanged() {
+        let coolingDown = CoolDownManager.shared.isCoolingDown
+        
+        DispatchQueue.main.async { [weak self] in
+            self?.isCoolingDown = coolingDown
+            
+            if coolingDown {
+                // Entering cool-down: flush pending tracks but don't stop camera
+                self?.state = .coolingDown
+                print("[COOL-DOWN] Processor entering cool-down state")
+            } else {
+                // Exiting cool-down: resume normal processing
+                print("[COOL-DOWN] Processor resuming from cool-down state")
+                // State will be updated by normal processing flow
+            }
+        }
     }
 
     // MARK: - Lifecycle
@@ -222,9 +244,6 @@ final class TrapjawProcessor {
             cameraManager.start()
             dataStreamer.start()
             isRunning = true
-            DispatchQueue.main.async {
-                UIApplication.shared.isIdleTimerDisabled = true
-            }
             state = .warmingUp
 
         } catch {
@@ -248,9 +267,6 @@ final class TrapjawProcessor {
         bridge = nil
         fourKBuffer?.clear()
         isRunning = false
-        DispatchQueue.main.async {
-            UIApplication.shared.isIdleTimerDisabled = false
-        }
         state = .idle
     }
     
@@ -278,9 +294,6 @@ final class TrapjawProcessor {
         fourKBuffer?.clear()
         
         isRunning = false
-        DispatchQueue.main.async {
-            UIApplication.shared.isIdleTimerDisabled = false
-        }
         state = .paused
     }
     
@@ -310,6 +323,11 @@ final class TrapjawProcessor {
 
     // MARK: - Crop Handling
 
+    // Diagnostic counters for frame extraction
+    private var totalCropsReceived: UInt64 = 0
+    private var cropsDroppedMissingFrame: UInt64 = 0
+    private var cropsDroppedExtractionFailed: UInt64 = 0
+    
     private func handleCrop(_ crop: CropData) {
         guard let bridge else { return }
         
@@ -320,6 +338,8 @@ final class TrapjawProcessor {
         let frameIndex = crop.frameIndex
         let timestamp = crop.timestamp
         
+        totalCropsReceived += 1
+        
         // Scale bbox from1080p to 4K
         let bbox1080p = crop.bbox
         let bbox4K = CGRect(
@@ -329,13 +349,28 @@ final class TrapjawProcessor {
             height: bbox1080p.size.height * cropScaleFactor
         )
         
+        // Diagnostic logging every 20 crops
+        if totalCropsReceived % 20 == 1 {
+            let bufferDepth = fourKBuffer?.currentCount ?? 0
+            print("[CROP-DIAG] Requesting frame \(frameIndex), buffer depth: \(bufferDepth), drops: missing=\(cropsDroppedMissingFrame), failed=\(cropsDroppedExtractionFailed)")
+        }
+        
         jpegQueue.async { [weak self] in
             guard let self else { return }
             
             // Get 4K frame from buffer - drop crop if frame not available
             guard let pixelBuffer4K = self.fourKBuffer?.get(frameIndex: frameIndex) else {
                 // Frame was evicted from buffer, drop this crop
+                self.cropsDroppedMissingFrame += 1
+                if self.totalCropsReceived % 20 == 1 {
+                    print("[CROP-DIAG] ❌ Frame \(frameIndex) NOT FOUND in buffer (dropped)")
+                }
                 return
+            }
+            
+            // Verify we got the right frame
+            if self.totalCropsReceived % 20 == 1 {
+                print("[CROP-DIAG] ✅ Frame \(frameIndex) retrieved successfully")
             }
             
             // Extract crop from 4K frame and convert to JPEG (CoreImage preserves color accuracy)
@@ -344,6 +379,10 @@ final class TrapjawProcessor {
                 bbox: bbox4K
             ) else {
                 // Failed to extract crop, drop
+                self.cropsDroppedExtractionFailed += 1
+                if self.totalCropsReceived % 20 == 1 {
+                    print("[CROP-DIAG] ❌ Extraction failed for frame \(frameIndex)")
+                }
                 return
             }
             
@@ -477,6 +516,11 @@ final class TrapjawProcessor {
 extension TrapjawProcessor: CameraManagerDelegate {
     func cameraManager(_ manager: CameraManager, didOutput sampleBuffer: CMSampleBuffer) {
         guard let _ = bridge, isRunning else { return }
+        
+        // Skip processing during cool-down periods (but keep buffering frames)
+        if CoolDownManager.shared.isCoolingDown {
+            return
+        }
         
         // Start frame timing
         timing.startFrame()

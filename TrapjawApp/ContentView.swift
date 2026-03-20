@@ -57,6 +57,14 @@ struct ContentView: View {
                     .padding(.trailing, 8)
             }
 
+            // Cool-down indicator
+            if processor.isCoolingDown {
+                Text("COOLING DOWN")
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.cyan)
+                    .padding(.trailing, 8)
+            }
+
             // Connection status
             HStack(spacing: 4) {
                 Circle()
@@ -85,6 +93,7 @@ struct ContentView: View {
         case .failed: .red
         case .paused: .orange
         case .waiting: .yellow
+        case .coolingDown: .cyan
         }
     }
 

@@ -51,12 +51,24 @@ final class FourKFrameBuffer {
             frameOrder.append(frameIndex)
             totalFramesStored += 1
             
+            // Diagnostic logging every 60 frames
+            if frameIndex % 60 == 0 {
+                let oldest = frameOrder.first ?? 0
+                let newest = frameOrder.last ?? 0
+                print("[BUFFER] Added frame \(frameIndex), buffer: \(frames.count)/\(maxFrames), range: [\(oldest)...\(newest)]")
+            }
+            
             // Remove oldest frames if buffer is full
             while frameOrder.count > maxFrames {
                 guard let oldestIndex = frameOrder.first else { break }
                 frameOrder.removeFirst()
                 frames.removeValue(forKey: oldestIndex)
                 totalFramesDropped += 1
+                
+                // Log eviction
+                if frameIndex % 60 == 0 {
+                    print("[BUFFER] ⚠️ Evicted frame \(oldestIndex) (buffer full)")
+                }
             }
         }
     }
@@ -68,6 +80,12 @@ final class FourKFrameBuffer {
         return queue.sync {
             if frames[frameIndex] == nil {
                 totalCropsMissed += 1
+                // Log miss every 20th miss to avoid spam
+                if totalCropsMissed % 20 == 1 {
+                    let oldest = frameOrder.first ?? 0
+                    let newest = frameOrder.last ?? 0
+                    print("[BUFFER] ❌ Missed frame \(frameIndex), buffer has [\(oldest)...\(newest)]")
+                }
             }
             return frames[frameIndex]
         }
