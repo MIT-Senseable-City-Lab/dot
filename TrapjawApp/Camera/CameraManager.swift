@@ -31,6 +31,10 @@ final class CameraManager: NSObject {
 
     /// Whether the capture session is currently running.
     var isRunning: Bool { session.isRunning }
+    
+    /// The capture resolution (4Kfor this implementation).
+    static let captureWidth: Int = 3840
+    static let captureHeight: Int = 2160
 
     // MARK: - Configuration
 
@@ -67,7 +71,7 @@ final class CameraManager: NSObject {
             session.removeOutput(output)
         }
 
-        session.sessionPreset = .hd1920x1080
+        session.sessionPreset = .hd4K3840x2160
 
         // Camera input — prefer wide-angle back camera
         guard let device = AVCaptureDevice.default(
@@ -100,9 +104,9 @@ final class CameraManager: NSObject {
                 device.setExposureModeCustom(duration: exposureDuration, iso: clampedISO, completionHandler: nil)
             }
             
-            // Lock focus at midpoint (prevent autofocus hunting during detection)
-            if device.isFocusModeSupported(.locked) {
-                device.setFocusModeLocked(lensPosition: 0.5, completionHandler: nil)
+            // Use continuous autofocus to adapt to scene distance
+            if device.isFocusModeSupported(.continuousAutoFocus) {
+                device.focusMode = .continuousAutoFocus
             }
             
             // Set white balance to continuous auto (adapts to outdoor lighting)

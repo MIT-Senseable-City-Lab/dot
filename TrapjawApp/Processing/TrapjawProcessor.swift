@@ -12,9 +12,13 @@ import AVFoundation
 import Metal
 import CoreVideo
 import UIKit
+import CoreImage
 
-@Observable
-final class TrapjawProcessor {
+// Shared CIContext for efficient crop extraction (preserves color accuracy)
+private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
+
+    @Observable
+    final class TrapjawProcessor {
 
     // MARK: - Public State
 
@@ -27,6 +31,7 @@ final class TrapjawProcessor {
     private(set) var tracksSent: Int = 0
     private(set) var pendingUploads: Int = 0
     private(set) var uploadErrors: Int = 0
+    private(set) var isCoolingDown: Bool = false
 
     enum ProcessorState: String {
         case idle = "Idle"
@@ -37,6 +42,7 @@ final class TrapjawProcessor {
         case failed = "Failed"
         case paused = "Paused"
         case waiting = "Waiting..."
+        case coolingDown = "Cooling Down"
     }
 
     // MARK: - Dependencies
@@ -44,10 +50,22 @@ final class TrapjawProcessor {
     let cameraManager = CameraManager()
     private var bridge: TrapjawBridge?
     private let metalDevice: MTLDevice?
+    
+    // MARK: - 4K Processing
+    
+    private var fourKBuffer: FourKFrameBuffer?
+    private var downscaler: MetalDownscaler?
+    private let processingWidth: Int = 1920
+    private let processingHeight: Int = 1080
+    
+    // Scale factor: 4K / 1080p = 2
+    private let cropScaleFactor: CGFloat = 2.0
 
     // MARK: - Processing State
 
     private var frameIndex: UInt64 = 0
+    private var warmupFramesProcessed: UInt64 = 0  // Counts frames during warmup
+    private var lastProcessedFrame: UInt64 = 0     // For detecting out-of-order processing
     private var startTime: CFAbsoluteTime = 0
     private let config: tj_config_t
     private let statsUpdateInterval: UInt64 = 30
@@ -59,6 +77,11 @@ final class TrapjawProcessor {
     private let httpUploader = HTTPUploader.shared
     private let trackBuffer = TrackBuffer.shared
     private let networkConfig = NetworkConfig.shared
+    
+    // MARK: - Timing & Diagnostics
+    
+    private let timing = TimingMetrics()
+    private let timingLogInterval: UInt64 = 60
     
     // MARK: - JPEG Conversion Queue
     
@@ -76,6 +99,28 @@ final class TrapjawProcessor {
         cfg.camera_fov_degrees = 67.0
         cfg.debug_enabled = true
         self.config = cfg
+        
+        // Initialize 4K frame buffer (10 frames ~330MB) - reduced for memory efficiency
+        self.fourKBuffer = FourKFrameBuffer(maxFrames: 10)
+        
+        // Initialize Metal downscaler for 4K→1080p
+        self.downscaler = MetalDownscaler(device: metalDevice)
+        
+        // Observe memory pressure to reduce buffer if needed
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMemoryWarning),
+            name: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil
+        )
+        
+        // Observe cool-down state changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(coolDownStateChanged),
+            name: .coolDownStateChanged,
+            object: nil
+        )
         
         NotificationCenter.default.addObserver(
             self,
@@ -105,13 +150,7 @@ final class TrapjawProcessor {
     
     deinit {
         NotificationCenter.default.removeObserver(self)
-        if Thread.isMainThread {
-            UIApplication.shared.isIdleTimerDisabled = false
-        } else {
-            DispatchQueue.main.sync {
-                UIApplication.shared.isIdleTimerDisabled = false
-            }
-        }
+        // Note: Screen idle timer is now managed at app level (always disabled)
     }
     
     @objc private func connectionStatusChanged() {
@@ -137,6 +176,29 @@ final class TrapjawProcessor {
             self?.uploadErrors = self?.httpUploader.uploadErrors ?? 0
         }
     }
+    
+    @objc private func handleMemoryWarning() {
+        // Reduce 4K buffer from 10 to 5 frames on memory warning
+        fourKBuffer?.reduceCapacity(to: 5)
+    }
+    
+    @objc private func coolDownStateChanged() {
+        let coolingDown = CoolDownManager.shared.isCoolingDown
+        
+        DispatchQueue.main.async { [weak self] in
+            self?.isCoolingDown = coolingDown
+            
+            if coolingDown {
+                // Entering cool-down: flush pending tracks but don't stop camera
+                self?.state = .coolingDown
+                print("[COOL-DOWN] Processor entering cool-down state")
+            } else {
+                // Exiting cool-down: resume normal processing
+                print("[COOL-DOWN] Processor resuming from cool-down state")
+                // State will be updated by normal processing flow
+            }
+        }
+    }
 
     // MARK: - Lifecycle
 
@@ -147,10 +209,12 @@ final class TrapjawProcessor {
         state = .configuring
         error = nil
         frameIndex = 0
+        warmupFramesProcessed = 0
         startTime = CFAbsoluteTimeGetCurrent()
         metrics.reset()
         trackBuffer.clear()
         networkConfig.startNewSession()
+        fourKBuffer?.clear()
 
         do {
             let bridge = try TrapjawBridge(config: config, device: metalDevice)
@@ -162,7 +226,14 @@ final class TrapjawProcessor {
 
             bridge.onDebugFrame = { [weak self] (pipelineMs, activeTracks, frameIdx) in
                 guard let self else { return }
+                // Debug logging every 30 frames
+                if frameIdx % 30 == 0 {
+                    print("[DEBUG_FRAME] idx=\(frameIdx), activeTracks=\(activeTracks), pipelineMs=\(pipelineMs)")
+                }
                 DispatchQueue.main.async {
+                    // Update combined GPU time: downscale + trapjaw pipeline
+                    let downscaleMs = self.timing.downscale.lastMs
+                    self.metrics.updateGpuTime(downscaleMs: downscaleMs, trapjawPipelineMs: pipelineMs)
                     self.metrics.updateActiveTrackCount(activeTracks)
                 }
             }
@@ -173,9 +244,6 @@ final class TrapjawProcessor {
             cameraManager.start()
             dataStreamer.start()
             isRunning = true
-            DispatchQueue.main.async {
-                UIApplication.shared.isIdleTimerDisabled = true
-            }
             state = .warmingUp
 
         } catch {
@@ -197,10 +265,8 @@ final class TrapjawProcessor {
         flushRemainingTracks()
         
         bridge = nil
+        fourKBuffer?.clear()
         isRunning = false
-        DispatchQueue.main.async {
-            UIApplication.shared.isIdleTimerDisabled = false
-        }
         state = .idle
     }
     
@@ -224,10 +290,10 @@ final class TrapjawProcessor {
         bridge?.flush()
         bridge = nil
         
+        // Clear 4K buffer
+        fourKBuffer?.clear()
+        
         isRunning = false
-        DispatchQueue.main.async {
-            UIApplication.shared.isIdleTimerDisabled = false
-        }
         state = .paused
     }
     
@@ -257,6 +323,11 @@ final class TrapjawProcessor {
 
     // MARK: - Crop Handling
 
+    // Diagnostic counters for frame extraction
+    private var totalCropsReceived: UInt64 = 0
+    private var cropsDroppedMissingFrame: UInt64 = 0
+    private var cropsDroppedExtractionFailed: UInt64 = 0
+    
     private func handleCrop(_ crop: CropData) {
         guard let bridge else { return }
         
@@ -264,28 +335,66 @@ final class TrapjawProcessor {
         trackBuffer.setStitchedId(rawTrackId: crop.trackID, stitchedId: stitchedId)
         
         let trackId = crop.trackID
-        let bbox = crop.bbox
-        let width = crop.width
-        let height = crop.height
         let frameIndex = crop.frameIndex
         let timestamp = crop.timestamp
-        let pixelData = crop.pixelData
+        
+        totalCropsReceived += 1
+        
+        // Scale bbox from1080p to 4K
+        let bbox1080p = crop.bbox
+        let bbox4K = CGRect(
+            x: bbox1080p.origin.x * cropScaleFactor,
+            y: bbox1080p.origin.y * cropScaleFactor,
+            width: bbox1080p.size.width * cropScaleFactor,
+            height: bbox1080p.size.height * cropScaleFactor
+        )
+        
+        // Diagnostic logging every 20 crops
+        if totalCropsReceived % 20 == 1 {
+            let bufferDepth = fourKBuffer?.currentCount ?? 0
+            print("[CROP-DIAG] Requesting frame \(frameIndex), buffer depth: \(bufferDepth), drops: missing=\(cropsDroppedMissingFrame), failed=\(cropsDroppedExtractionFailed)")
+        }
         
         jpegQueue.async { [weak self] in
             guard let self else { return }
             
-            guard let jpegData = self.convertToJPEG(pixelData, width: width, height: height) else {
+            // Get 4K frame from buffer - drop crop if frame not available
+            guard let pixelBuffer4K = self.fourKBuffer?.get(frameIndex: frameIndex) else {
+                // Frame was evicted from buffer, drop this crop
+                self.cropsDroppedMissingFrame += 1
+                if self.totalCropsReceived % 20 == 1 {
+                    print("[CROP-DIAG] ❌ Frame \(frameIndex) NOT FOUND in buffer (dropped)")
+                }
                 return
             }
             
+            // Verify we got the right frame
+            if self.totalCropsReceived % 20 == 1 {
+                print("[CROP-DIAG] ✅ Frame \(frameIndex) retrieved successfully")
+            }
+            
+            // Extract crop from 4K frame and convert to JPEG (CoreImage preserves color accuracy)
+            guard let jpegData = self.extractCropFrom4K(
+                pixelBuffer: pixelBuffer4K,
+                bbox: bbox4K
+            ) else {
+                // Failed to extract crop, drop
+                self.cropsDroppedExtractionFailed += 1
+                if self.totalCropsReceived % 20 == 1 {
+                    print("[CROP-DIAG] ❌ Extraction failed for frame \(frameIndex)")
+                }
+                return
+            }
+            
+            // Resolution is 4K
             let resolution = StreamResolution(
-                width: Int(self.config.frame_width),
-                height: Int(self.config.frame_height)
+                width: Int(CameraManager.captureWidth),
+                height: Int(CameraManager.captureHeight)
             )
             
             if let trackToUpload = self.trackBuffer.addCrop(
                 trackId: trackId,
-                bbox: bbox,
+                bbox: bbox1080p,  // Keep 1080p bbox for telemetry consistency
                 frameIndex: frameIndex,
                 timestamp: timestamp,
                 jpegData: jpegData,
@@ -296,30 +405,37 @@ final class TrapjawProcessor {
         }
     }
     
-    private func convertToJPEG(_ pixelData: Data, width: UInt32, height: UInt32) -> Data? {
-        let cgImage = createCGImage(from: pixelData, width: width, height: height)
+    /// Extract a cropped region from a 4K CVPixelBuffer using CoreImage for accurate color.
+    /// This preserves the camera's color space metadata (fixes pink/purple color cast).
+    private func extractCropFrom4K(pixelBuffer: CVPixelBuffer, bbox: CGRect) -> Data? {
+        let bufferHeight = CVPixelBufferGetHeight(pixelBuffer)
+        
+        // Clamp bbox to valid bounds
+        let clampedX = max(0, CGFloat(bbox.origin.x))
+        let clampedY = max(0, CGFloat(bbox.origin.y))
+        let clampedW = min(CGFloat(bbox.size.width), CGFloat(CVPixelBufferGetWidth(pixelBuffer)) - clampedX)
+        let clampedH = min(CGFloat(bbox.size.height), CGFloat(bufferHeight) - clampedY)
+        
+        guard clampedW > 0 && clampedH > 0 else { return nil }
+        
+        // Create CIImage from pixel buffer (preserves camera color space)
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        
+        // Flip Y coordinate (CoreImage uses bottom-left origin, UIKit uses top-left)
+        let flippedY = CGFloat(bufferHeight) - clampedY - clampedH
+        let cropRect = CGRect(x: clampedX, y: flippedY, width: clampedW, height: clampedH)
+        
+        // Crop the image
+        let croppedImage = ciImage.cropped(to: cropRect)
+        
+        // Render to CGImage using shared context (GPU-accelerated)
+        guard let cgImage = sharedCIContext.createCGImage(croppedImage, from: croppedImage.extent) else {
+            return nil
+        }
+        
+        // Convert to JPEG with maximum quality (no compression artifacts)
         let uiImage = UIImage(cgImage: cgImage)
-        return uiImage.jpegData(compressionQuality: 0.7)
-    }
-    
-    private func createCGImage(from pixelData: Data, width: UInt32, height: UInt32) -> CGImage {
-        let bytesPerPixel = 4
-        let bytesPerRow = Int(width) * bytesPerPixel
-        
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)
-        
-        let context = CGContext(
-            data: UnsafeMutablePointer(mutating: (pixelData as NSData).bytes.bindMemory(to: UInt8.self, capacity: pixelData.count)),
-            width: Int(width),
-            height: Int(height),
-            bitsPerComponent: 8,
-            bytesPerRow: bytesPerRow,
-            space: colorSpace,
-            bitmapInfo: bitmapInfo.rawValue
-        )!
-        
-        return context.makeImage()!
+        return uiImage.jpegData(compressionQuality: 1.0)
     }
     
     // MARK: - Track Upload
@@ -350,22 +466,26 @@ final class TrapjawProcessor {
         dataStreamer.sendTrackTelemetry(payload)
         
         let jpegDataArray = track.crops.map { $0.jpegData }
-        httpUploader.uploadCrops(trackId: trackIdString, crops: jpegDataArray)
+        httpUploader.uploadCrops(trackId: trackIdString, crops: jpegDataArray, startIndex: track.startIndex)
     }
 
-    private func updateStats() {
+    private func updateStats(warmupCount: UInt64) {
         guard let bridge else { return }
         let stats = bridge.getStats()
+        
+        print("[STATS] warmupCount=\(warmupCount), threshold=\(config.bg_warmup_frames), state=\(state.rawValue)")
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.metrics.updateFromStats(stats)
+            
             self.metrics.updateWarmupStatus(
-                framesProcessed: stats.frames_processed,
+                framesProcessed: warmupCount,
                 warmupFrames: self.config.bg_warmup_frames
             )
 
-            if stats.frames_processed >= UInt64(self.config.bg_warmup_frames) && self.state == .warmingUp {
+            if warmupCount >= UInt64(self.config.bg_warmup_frames) && self.state == .warmingUp {
+                print("[STATE] Transitioning: \(self.state.rawValue) → processing")
                 self.state = .processing
             }
         }
@@ -395,38 +515,93 @@ final class TrapjawProcessor {
 
 extension TrapjawProcessor: CameraManagerDelegate {
     func cameraManager(_ manager: CameraManager, didOutput sampleBuffer: CMSampleBuffer) {
-        guard let bridge, isRunning else { return }
-
+        guard let _ = bridge, isRunning else { return }
+        
+        // Skip processing during cool-down periods (but keep buffering frames)
+        if CoolDownManager.shared.isCoolingDown {
+            return
+        }
+        
+        // Start frame timing
+        timing.startFrame()
+        
         DispatchQueue.main.async { [weak self] in
             self?.metrics.recordCameraFrame()
         }
 
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        guard let pixelBuffer4K = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         let timestamp = CMTimeGetSeconds(pts)
 
         let currentIndex = frameIndex
         frameIndex += 1
-
-        let result = bridge.processFrame(
-            pixelBuffer: pixelBuffer,
-            frameIndex: currentIndex,
-            timestamp: timestamp
-        )
-
-        if result == TJ_OK || result == TJ_ERROR_NOT_READY {
-            DispatchQueue.main.async { [weak self] in
-                self?.metrics.recordProcessedFrame()
-            }
-        }
-
-        if currentIndex % statsUpdateInterval == 0 {
-            updateStats()
+        
+        // Increment warmup frame counter (for warmup detection)
+        warmupFramesProcessed += 1
+        
+        // Debug logging every 30 frames
+        if currentIndex % 30 == 0 {
+            print("[FRAME] idx=\(currentIndex), warmupCount=\(warmupFramesProcessed), state=\(state.rawValue)")
         }
         
-        if currentIndex % terminationCheckInterval == 0 {
-            checkTerminatedTracks()
+        // Stage: Buffer storage
+        let t0 = CFAbsoluteTimeGetCurrent()
+        fourKBuffer?.add(pixelBuffer: pixelBuffer4K, frameIndex: currentIndex)
+        let t1 = CFAbsoluteTimeGetCurrent()
+        timing.record(stage: &timing.bufferStore, durationMs: (t1 - t0) * 1000)
+        
+        // Async downscale 4K → 1080p
+        let t2 = CFAbsoluteTimeGetCurrent()
+        downscaler?.downscale(inputBuffer: pixelBuffer4K, quality: .average) { [weak self] pixelBuffer1080p in
+            guard let self = self else { return }
+            
+            let t3 = CFAbsoluteTimeGetCurrent()
+            self.timing.record(stage: &self.timing.downscale, durationMs: (t3 - t2) * 1000)
+            
+            guard let pixelBuffer1080p = pixelBuffer1080p else {
+                print("[ERROR] Downscale failed for frame \(currentIndex)")
+                return
+            }
+            
+            // Diagnostic: Check frame processing order
+            if currentIndex <= self.lastProcessedFrame {
+                print("[ORDER] ⚠️ OUT OF ORDER: Frame \(currentIndex) processed after frame \(self.lastProcessedFrame)")
+            } else if currentIndex > self.lastProcessedFrame + 1 {
+                let gap = currentIndex - self.lastProcessedFrame - 1
+                print("[ORDER] Gap detected: Frame \(currentIndex) after \(self.lastProcessedFrame) (missed \(gap) frames)")
+            }
+            self.lastProcessedFrame = currentIndex
+            
+            // Stage: Trapjaw processing
+            let t4 = CFAbsoluteTimeGetCurrent()
+            let result = self.bridge?.processFrame(
+                pixelBuffer: pixelBuffer1080p,
+                frameIndex: currentIndex,
+                timestamp: timestamp
+            )
+            let t5 = CFAbsoluteTimeGetCurrent()
+            self.timing.record(stage: &self.timing.trapjawProcess, durationMs: (t5 - t4) * 1000)
+            
+            if result == TJ_OK || result == TJ_ERROR_NOT_READY {
+                DispatchQueue.main.async { [weak self] in
+                    self?.metrics.recordProcessedFrame()
+                }
+            }
+            
+            // End frame timing
+            let _ = self.timing.endFrame()
+            
+            // Log timing summary every 60 frames
+            self.timing.logSummaryIfNeeded(frameIndex: currentIndex, bufferDepth: self.fourKBuffer?.currentCount ?? 0)
+
+            if currentIndex % self.statsUpdateInterval == 0 {
+                self.updateStats(warmupCount: self.warmupFramesProcessed)
+            }
+            
+            if currentIndex % self.terminationCheckInterval == 0 {
+                self.checkTerminatedTracks()
+            }
         }
     }
 

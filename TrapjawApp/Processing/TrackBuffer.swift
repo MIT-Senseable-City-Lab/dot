@@ -21,6 +21,7 @@ struct FinalizedTrack {
     let stitchedId: UInt32
     let crops: [BufferedCrop]
     let resolution: StreamResolution
+    let startIndex: Int  // Starting crop number for sequential filenames
 }
 
 final class TrackBuffer {
@@ -42,6 +43,9 @@ final class TrackBuffer {
             stitchedIds[rawTrackId] = stitchedId
         }
     }
+    
+    // Track how many crops have been uploaded per track for sequential filenames
+    private var uploadedCropCounts: [UInt32: Int] = [:]
     
     func addCrop(
         trackId: UInt32,
@@ -112,6 +116,7 @@ final class TrackBuffer {
             crops.removeAll()
             lastCropFrame.removeAll()
             stitchedIds.removeAll()
+            uploadedCropCounts.removeAll()
         }
     }
     
@@ -119,6 +124,12 @@ final class TrackBuffer {
         guard let trackCrops = crops[trackId], !trackCrops.isEmpty else { return nil }
         
         let stitchedId = stitchedIds[trackId] ?? trackId
+        
+        // Get the starting index (how many crops already uploaded for this track)
+        let startIndex = uploadedCropCounts[trackId] ?? 0
+        
+        // Update the uploaded count for next batch
+        uploadedCropCounts[trackId] = startIndex + trackCrops.count
         
         crops.removeValue(forKey: trackId)
         lastCropFrame.removeValue(forKey: trackId)
@@ -128,7 +139,8 @@ final class TrackBuffer {
             trackId: trackId,
             stitchedId: stitchedId,
             crops: trackCrops,
-            resolution: resolution
+            resolution: resolution,
+            startIndex: startIndex
         )
     }
 }

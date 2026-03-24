@@ -22,7 +22,7 @@ final class HTTPUploader {
     static let shared = HTTPUploader()
     
     private let config = NetworkConfig.shared
-    private let maxRetries = 3
+    private let maxRetries = 1
     private let baseDelay: TimeInterval = 1.0
     
     private let counterQueue = DispatchQueue(label: "com.trapjaw.uploadcounters")
@@ -44,7 +44,9 @@ final class HTTPUploader {
     func uploadCrops(
         trackId: String,
         crops: [Data],
+        startIndex: Int = 0,
         retryCount: Int = 0,
+        isRetry: Bool = false,
         completion: ((Bool) -> Void)? = nil
     ) {
         guard !crops.isEmpty else {
@@ -61,8 +63,11 @@ final class HTTPUploader {
             return
         }
         
-        pendingUploads += 1
-        NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
+        // Only increment pending on initial upload, not retries
+        if !isRetry {
+            pendingUploads += 1
+            NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
+        }
         
         logger.info("Uploading \(crops.count) crops for track \(trackId.prefix(8))...")
         
@@ -79,7 +84,7 @@ final class HTTPUploader {
         var body = Data()
         
         for (index, jpegData) in crops.enumerated() {
-            let filename = String(format: "frame_%06d.jpg", index)
+            let filename = String(format: "frame_%06d.jpg", startIndex + index)
             
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
             body.append("Content-Disposition: form-data; name=\"files\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
@@ -100,7 +105,7 @@ final class HTTPUploader {
                     logger.info("Retrying in \(delay)s...")
                     
                     DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
-                        self.uploadCrops(trackId: trackId, crops: crops, retryCount: retryCount + 1, completion: completion)
+                        self.uploadCrops(trackId: trackId, crops: crops, startIndex: startIndex, retryCount: retryCount + 1, isRetry: true, completion: completion)
                     }
                     return
                 }
@@ -119,7 +124,7 @@ final class HTTPUploader {
                 if retryCount < self.maxRetries {
                     let delay = self.baseDelay * pow(2.0, Double(retryCount))
                     DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
-                        self.uploadCrops(trackId: trackId, crops: crops, retryCount: retryCount + 1, completion: completion)
+                        self.uploadCrops(trackId: trackId, crops: crops, startIndex: startIndex, retryCount: retryCount + 1, isRetry: true, completion: completion)
                     }
                     return
                 }
@@ -143,7 +148,7 @@ final class HTTPUploader {
                 if retryCount < self.maxRetries {
                     let delay = self.baseDelay * pow(2.0, Double(retryCount))
                     DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
-                        self.uploadCrops(trackId: trackId, crops: crops, retryCount: retryCount + 1, completion: completion)
+                        self.uploadCrops(trackId: trackId, crops: crops, startIndex: startIndex, retryCount: retryCount + 1, isRetry: true, completion: completion)
                     }
                     return
                 }

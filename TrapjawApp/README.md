@@ -4,31 +4,41 @@ iOS application for real-time insect detection and tracking using the trapjaw li
 
 ## Features
 
-- **Real-time camera processing** at 30fps (1080p)
-- **GPU-accelerated detection** via Metal compute shaders
+- **Real-time camera processing** at 30fps (4K capture, 1080p processing)
+- **Async GPU-accelerated pipeline** via Metal compute shaders
+- **4K crop extraction** for higher resolution insect identification
 - **Automatic background model warmup** with configurable frame count
 - **Multi-object tracking** with identity stitching across occlusion gaps
-- **Crop extraction** with JPEG conversion and buffering
+- **Crop extraction** with CoreImage (preserves color accuracy) and JPEG encoding
 - **Network streaming** to Pi server via HTTP
 - **Time-based operation** (5AM - 10PM local time)
 - **Automatic pause/resume** at operating hours boundaries
-- **Retry logic** for failed uploads with exponential backoff
-- **Screen always-on** during processing
+- **Scheduled cool-down periods** to prevent thermal throttling
+- **Memory pressure handling** with automatic buffer reduction
+- **Screen always-on** (including overnight pause for connection maintenance)
 
 ## Architecture
 
 ### Pipeline
 
 ```
-Camera (30fps, 1080p, BGRA8)
+Camera (30fps, 4K, BGRA8)
+    │
+    ├─► FourKFrameBuffer (10 frames, ~330MB)
     │
     ▼
-TrapjawBridge (GPU detection, tracking)
+MetalDownscaler (async 4K→1080p)
     │
-    ├─► Crop callback ──► JPEG conversion (concurrent queue)
+    ▼
+TrapjawBridge (GPU detection, tracking at 1080p)
+    │
+    ├─► Crop callback ──► Scale bbox 2x (1080p → 4K)
     │                         │
     │                         ▼
-    │                    TrackBuffer (in-memory)
+    │                    Extract from 4K buffer (CoreImage)
+    │                         │
+    │                         ▼
+    │                    JPEG conversion (100% quality)
     │                         │
     │                         ▼ (on termination)
     │                    Upload: telemetry + crops
@@ -40,11 +50,15 @@ TrapjawBridge (GPU detection, tracking)
 
 | Component | File | Responsibility |
 |-----------|------|----------------|
-| `CameraManager` | `Camera/CameraManager.swift` | AVCaptureSession, frame delivery |
+| `CameraManager` | `Camera/CameraManager.swift` | AVCaptureSession, 4K capture, exposure/focus control |
+| `FourKFrameBuffer` | `Processing/FourKFrameBuffer.swift` | Rolling 10-frame 4K buffer for crop extraction |
+| `MetalDownscaler` | `Processing/MetalDownscaler.swift` | Async GPU 4K→1080p downscaling |
 | `TrapjawBridge` | `Processing/TrapjawBridge.swift` | Swift wrapper for trapjaw C API |
 | `TrapjawProcessor` | `Processing/TrapjawProcessor.swift` | Pipeline orchestrator, lifecycle |
 | `TrackBuffer` | `Processing/TrackBuffer.swift` | Thread-safe in-memory crop buffering |
+| `TimingMetrics` | `Processing/TimingMetrics.swift` | Stage-by-stage timing diagnostics |
 | `TimeWindowManager` | `Processing/TimeWindowManager.swift` | Operating hours (5AM-10PM), power-efficient |
+| `CoolDownManager` | `Processing/CoolDownManager.swift` | Thermal management, scheduled cool-down periods |
 | `NetworkConfig` | `Networking/NetworkConfig.swift` | Server URL, device ID, DOT session |
 | `DataStreamer` | `Networking/DataStreamer.swift` | Heartbeat (10s), telemetry POST |
 | `HTTPUploader` | `Networking/HTTPUploader.swift` | Multipart JPEG upload with retry |
@@ -76,18 +90,48 @@ Configured for consistent field deployment:
 
 | Setting | Value | Purpose |
 |---------|-------|---------|
-| Session preset | 1080p @ 30fps | Match trapjaw config |
+| Session preset | 4K @ 30fps | Capture at highest resolution for crops |
+| Downscale | Async Metal (4K→1080p) | GPU-accelerated, non-blocking pipeline |
 | Exposure duration | 1/1000 sec | Freeze insect motion |
-| Focus mode | Locked at 0.5 | Prevent autofocus hunting |
+| Focus mode | Continuous autofocus | Adapts to scene distance |
 | HDR | Disabled | Consistent exposure |
 | White balance | Continuous auto | Adapt to outdoor lighting |
+| Crop extraction | CoreImage from 4K | Preserves camera color space, no artifacts |
+| JPEG quality | 100% | No compression artifacts for identification |
 
 ### Track Upload
 
 - **Buffer size**: Max 150 crops per track in memory
 - **Upload trigger**: Track termination or buffer full
-- **Retry**: 3 attempts with exponential backoff (1s, 2s, 4s)
-- **Crop format**: JPEG at 70% quality
+- **Retry**: 1 attempt (reduced for performance)
+- **Crop format**: JPEG at 100% quality (4K resolution)
+- **Sequential filenames**: `frame_000000.jpg`, `frame_000060.jpg`, etc.
+
+## 4K Crop Pipeline
+
+### Why 4K?
+
+- **Higher resolution crops** for better insect identification
+- **Trapjaw processes at 1080p** for performance
+- **Crops extracted from 4K buffer** for maximum detail
+- **Scalable bbox coordinates** (2x from 1080p detection)
+
+### Pipeline Flow
+
+1. **Camera captures 4K** (3840×2160) frame
+2. **Frame stored** in rolling 4K buffer (10 frames, ~330MB)
+3. **Async downscale** 4K → 1080p via Metal compute shaders
+4. **Trapjaw processes** 1080p frame for detection
+5. **Bounding box detected** at 1080p resolution
+6. **Bbox scaled 2x** to 4K coordinates
+7. **CoreImage extracts crop** from 4K buffer (preserves color)
+8. **JPEG encoded at 100%** quality for upload
+
+### Memory Management
+
+- **4K buffer**: 10 frames × ~33MB = ~330MB
+- **Pressure handling**: Reduces to 5 frames on iOS memory warning
+- **Async processing**: Camera callback non-blocking (GPU executes independently)
 
 ## Data Flow
 
@@ -99,6 +143,7 @@ Detection → Tracking → Termination → Upload
      ▼           ▼                        ▼
    Crops      Buffer crops         POST telemetry
               (max 150)            POST crops (multipart)
+                                     Sequential filenames
 ```
 
 ### Network Endpoints
@@ -116,7 +161,7 @@ Detection → Tracking → Termination → Upload
   "type": "track",
   "trackId": "42",
   "status": "completed",
-  "resolution": { "width": 1920, "height": 1080 },
+  "resolution": { "width": 3840, "height": 2160 },
   "points": [
     { "timestamp": "2024-01-15T10:30:00Z", "x": 100.5, "y": 200.3, "width": 50.0, "height": 30.0, "frameIndex": 900 }
   ],
@@ -132,13 +177,17 @@ TrapjawApp/
 ├── App/
 │   └── TrapjawApp.swift              # Entry point, auto-start, time monitoring
 ├── Camera/
-│   ├── CameraManager.swift           # AVCaptureSession configuration
+│   ├── CameraManager.swift           # AVCaptureSession, 4K capture configuration
 │   └── CameraPreviewView.swift       # Preview layer
 ├── Processing/
 │   ├── TrapjawBridge.swift           # C API wrapper, crop handling
 │   ├── TrapjawProcessor.swift        # Pipeline orchestrator, pause/resume
+│   ├── FourKFrameBuffer.swift        # Rolling 4K buffer (10 frames)
+│   ├── MetalDownscaler.swift         # Async GPU 4K→1080p downscaling
 │   ├── TrackBuffer.swift             # Thread-safe crop buffering
+│   ├── TimingMetrics.swift           # Stage-by-stage timing diagnostics
 │   ├── TimeWindowManager.swift       # Operating hours (5AM-10PM)
+│   ├── CoolDownManager.swift         # Thermal management, scheduled breaks
 │   └── PerformanceMetrics.swift      # FPS, timing stats
 ├── Networking/
 │   ├── NetworkConfig.swift           # Server URL, device ID
@@ -161,12 +210,14 @@ TrapjawApp/
 - Xcode 15.2+
 - iOS 18.0+ device
 - Metal-capable GPU
+- trapjaw submodule initialized: `git submodule update --init --recursive`
 
 ### Steps
 
 1. **Build trapjaw library** (one-time):
 
 ```bash
+cd trapjaw
 ./build-trapjaw.sh
 ```
 
@@ -188,25 +239,22 @@ The app displays a minimal heads-up dashboard:
 
 ```
 ┌─────────────────────────────────────┐
-│ ● Processing    PAUSED  ● CONNECTED │
+│ ● Processing    ● CONNECTED         │
 ├─────────────────────────────────────┤
-│           TRAPJAW                    │
+│           TRAPJAW                   │
 │                                      │
-│   CAM FPS: 30.0    PROC FPS: 28.5    │
-│   AVG MS: 12.50    PEAK MS: 18.30    │
-│   GPU MS: 8.20     CPU MS: 4.30      │
+│   CAM FPS: 30.0    PROC FPS: 30.0   │
+│   AVG MS: 12.00    GPU MS: 10.00    │
 │                                      │
-│   TRACKS: 3        TOTAL: 42        │
-│   CROPS: 127       FRAMES: 900       │
-│                                      │
-│   SENT: 5          PENDING: 2        │
-│   FAILED: 0        BUFFERED: 127     │
+│   TRACKS: 1        CROPS: 45        │
+│   PENDING: 0       BUFFERED: 45     │
 └─────────────────────────────────────┘
 ```
 
-- **Status bar**: Processing state, PAUSED indicator (outside hours), connection status
-- **Metrics**: FPS, pipeline timing, track counts
-- **Network**: Uploads sent, pending, failed, buffered
+- **Status bar**: Processing state, connection status
+- **Metrics**: FPS, pipeline timing (AVG MS, GPU MS)
+- **Detection**: Track count, total crops
+- **Network**: Pending uploads, buffered crops
 
 ## Operating Hours Behavior
 
@@ -246,12 +294,76 @@ The app displays a minimal heads-up dashboard:
    - Starts camera
    - Resumes processing
 
+## Scheduled Cool-Down Periods
+
+To prevent thermal throttling on iPhone models with limited GPU performance (e.g., iPhone XR), the app implements scheduled cool-down periods.
+
+### Schedule
+
+- **Duration**: 5 minutes every hour
+- **Time window**: :55 to :00 (e.g., 12:55-13:00, 13:55-14:00)
+- **Behavior**: Processing pauses, camera continues running
+- **UI indicator**: "COOLING DOWN" appears in status bar (cyan color)
+
+### What Happens During Cool-Down
+
+```
+Normal Processing          Cool-Down Period          Resume Processing
+       │                          │                          │
+       ▼                          ▼                          ▼
+   ┌──────────┐              ┌──────────┐              ┌──────────┐
+   │ Process  │    :55       │ Pause    │    :00       │ Process  │
+   │ frames   │─────────────▶│ processing──────────────▶│ frames   │
+   │ (30fps)  │              │ (0fps)   │              │ (30fps)  │
+   └──────────┘              └──────────┘              └──────────┘
+        │                         │                          │
+        │                    ┌────┴────┐                     │
+        │                    │         │                     │
+        │                    ▼         ▼                     │
+        │              Camera    Pending uploads              │
+        │              continues   complete                   │
+        │              running     in background              │
+        │                    │         │                     │
+        └────────────────────┴─────────┴─────────────────────┘
+```
+
+### Implementation
+
+| Aspect | Details |
+|--------|---------|
+| Buffer behavior | 4K frame buffer continues accepting frames (10 frames) |
+| Crop processing | Paused - no new crops extracted during cool-down |
+| Network uploads | Continue in background (pending uploads complete) |
+| Camera state | Running (ready for immediate resume) |
+| State | `.coolingDown` with cyan status indicator |
+
+### Manual Override
+
+The cool-down manager supports manual control for testing or emergency situations:
+
+```swift
+// Skip current cool-down and resume immediately
+CoolDownManager.shared.skipCurrentCoolDown()
+
+// Force an immediate cool-down period
+CoolDownManager.shared.forceCoolDown(duration: 300) // 5 minutes
+
+// Disable cool-down scheduling entirely
+CoolDownManager.shared.isEnabled = false
+```
+
+### Files
+
+- `CoolDownManager.swift` - Schedule monitoring and state management
+- `TrapjawProcessor.swift` - Skips frame processing during cool-down
+- `ContentView.swift` - UI indicator for cool-down state
+
 ## Dependencies
 
 ### External
 
 - **trapjaw** (submodule): C library for insect detection
-- **Apple frameworks**: Metal, AVFoundation, CoreVideo, UIKit, Foundation
+- **Apple frameworks**: Metal, AVFoundation, CoreVideo, UIKit, Foundation, CoreImage
 
 ### No External Package Managers
 
@@ -262,11 +374,12 @@ All dependencies are Apple system frameworks. The trapjaw submodule is built as 
 | Metric | Typical Value |
 |--------|---------------|
 | Camera FPS | 30 fps |
-| Processing FPS | 28-30 fps |
-| Pipeline latency | 10-15 ms |
-| GPU time | 6-10 ms |
-| CPU time | 3-5 ms |
-| Memory per track | ~7.5 MB (150 crops) |
+| Processing FPS | 30-31 fps |
+| Downscale latency | 2-4 ms (async, GPU) |
+| Trapjaw latency | 6-10 ms |
+| Total pipeline | 10-15 ms |
+| Memory | ~200-330 MB (4K buffer + processing) |
+| Buffer size | 10 frames (configurable) |
 
 ## Troubleshooting
 
@@ -291,10 +404,39 @@ All dependencies are Apple system frameworks. The trapjaw submodule is built as 
 
 ### High memory usage
 
-- Tracks accumulate until termination
-- Max 150 crops per track (~7.5 MB)
-- Max 64 concurrent tracks (~480 MB worst case)
-- Memory pressure handled by early upload at 150 crops
+- 4K buffer: 10 frames × ~33MB = ~330MB baseline
+- On memory warning: Automatically reduces to 5 frames
+- If consistently high: Reduce buffer size in `TrapjawProcessor.swift`: `FourKFrameBuffer(maxFrames: 8)`
+
+### Crops have pink/purple color cast
+
+This has been fixed by using CoreImage for crop extraction:
+- CoreImage preserves camera's color space metadata
+- Manual byte extraction loses color information
+- JPEG quality set to 100% for accuracy
+
+### Crops are blurry
+
+Check camera configuration:
+1. **Focus**: Ensure continuous autofocus is enabled (not locked)
+2. **Exposure**: 1/1000s shutter should freeze motion
+3. **ISO**: Check if ISO is too high (causes noise)
+4. **Distance**: Camera should be 0.4-0.6m from insects for sharp focus
+5. **Lighting**: Ensure adequate lighting to keep ISO low
+
+To debug, add logging in `CameraManager.swift`:
+```swift
+print("ISO: \(device.iso), Focus: \(device.lensPosition), Exposure: \(CMTimeGetSeconds(device.exposureDuration))s")
+```
+
+### App frozen at "Warming Up"
+
+This can happen if:
+- `frames_processed` counter not incrementing (use `warmupFramesProcessed` instead)
+- Camera callback blocked (fixed by async Metal downscaler)
+- Thread safety issues with stats (fixed by passing captured values)
+
+Check logs for `[FRAME]` messages - if missing, camera may not be delivering frames.
 
 ## License
 

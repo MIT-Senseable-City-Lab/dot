@@ -31,6 +31,10 @@
 		A10001E2 /* DataStreamer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E5 /* DataStreamer.swift */; };
 		A10001E6 /* HTTPUploader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E7 /* HTTPUploader.swift */; };
 		A10001E8 /* TimeWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E9 /* TimeWindowManager.swift */; };
+		A10001F0 /* FourKFrameBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001F1 /* FourKFrameBuffer.swift */; };
+		A10001F2 /* MetalDownscaler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001F3 /* MetalDownscaler.swift */; };
+		A10001F6 /* TimingMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001F7 /* TimingMetrics.swift */; };
+		A10001FA /* CoolDownManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001FB /* CoolDownManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -61,6 +65,10 @@
 		A10001E5 /* DataStreamer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStreamer.swift; sourceTree = "<group>"; };
 		A10001E7 /* HTTPUploader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPUploader.swift; sourceTree = "<group>"; };
 		A10001E9 /* TimeWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeWindowManager.swift; sourceTree = "<group>"; };
+		A10001F1 /* FourKFrameBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FourKFrameBuffer.swift; sourceTree = "<group>"; };
+		A10001F3 /* MetalDownscaler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalDownscaler.swift; sourceTree = "<group>"; };
+		A10001F7 /* TimingMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimingMetrics.swift; sourceTree = "<group>"; };
+		A10001FB /* CoolDownManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoolDownManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -131,6 +139,10 @@
 				A10001A6 /* PerformanceMetrics.swift */,
 				A10001E3 /* TrackBuffer.swift */,
 				A10001E9 /* TimeWindowManager.swift */,
+				A10001F1 /* FourKFrameBuffer.swift */,
+				A10001F3 /* MetalDownscaler.swift */,
+				A10001F7 /* TimingMetrics.swift */,
+				A10001FB /* CoolDownManager.swift */,
 			);
 			path = Processing;
 			sourceTree = "<group>";
@@ -263,6 +275,10 @@
 				A10001E2 /* DataStreamer.swift in Sources */,
 				A10001E6 /* HTTPUploader.swift in Sources */,
 				A10001E8 /* TimeWindowManager.swift in Sources */,
+				A10001F0 /* FourKFrameBuffer.swift in Sources */,
+				A10001F2 /* MetalDownscaler.swift in Sources */,
+				A10001F6 /* TimingMetrics.swift in Sources */,
+				A10001FA /* CoolDownManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -391,9 +407,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = A35W4MM59Y;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = A35W4MM59Y;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/trapjaw/include";
 				INFOPLIST_FILE = TrapjawApp/Info.plist;
@@ -410,6 +429,8 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = edu.mit.dot;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "SCL Dot";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -424,9 +445,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = A35W4MM59Y;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = A35W4MM59Y;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/trapjaw/include";
 				INFOPLIST_FILE = TrapjawApp/Info.plist;
@@ -443,6 +467,8 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = edu.mit.dot;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "SCL Dot";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
