@@ -11,6 +11,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Bindable var processor: TrapjawProcessor
+    @State private var showSettings = false
     @ObservedObject var timeWindow: TimeWindowManager
 
     var body: some View {
@@ -33,6 +34,9 @@ struct ContentView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+        }
     }
 
     // MARK: - Status Bar
@@ -81,6 +85,14 @@ struct ContentView: View {
                     .foregroundStyle(.orange)
                     .padding(.leading, 8)
             }
+            
+            // Settings button
+            Button(action: { showSettings = true }) {
+                Image(systemName: "gear")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.white)
+            }
+            .padding(.leading, 8)
         }
     }
 

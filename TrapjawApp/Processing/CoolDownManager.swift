@@ -53,6 +53,13 @@ final class CoolDownManager {
     // MARK: - Init
     
     private init() {
+        // Don't start monitoring here - defer to avoid RunLoop issues
+        // Monitoring will start on first access via ensureMonitoringStarted
+    }
+    
+    /// Ensures monitoring is started (called lazily)
+    private func ensureMonitoringStarted() {
+        guard timer == nil else { return }
         startMonitoring()
     }
     

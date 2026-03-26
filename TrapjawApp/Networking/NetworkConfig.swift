@@ -2,8 +2,8 @@
 //  NetworkConfig.swift
 //  TrapjawApp
 //
-//  Network configuration with hardcoded server URL.
-//  Manages device ID and DOT session naming.
+//  Network configuration with configurable server URL.
+//  Server URL can be customized via SettingsManager.
 //
 
 import Foundation
@@ -19,8 +19,6 @@ final class NetworkConfig {
     private(set) var deviceId: String
     private(set) var dotId: String
     private(set) var sessionStartTime: Date
-    
-    static let serverBaseURL = "http://192.168.1.150:5001"
     
     private init() {
         if let existingId = UserDefaults.standard.string(forKey: deviceIdKey) {
@@ -54,7 +52,16 @@ final class NetworkConfig {
         return "\(dotId)_\(timeStr)"
     }
     
-    func getServerURL() -> String { Self.serverBaseURL }
+    /// Returns the configured server URL from SettingsManager
+    func getServerURL() -> String {
+        return SettingsManager.shared.serverBaseURL
+    }
+    
+    /// Legacy method for compatibility - returns hardcoded default
+    /// Use getServerURL() for configurable URL
+    func getDefaultServerURL() -> String {
+        return "http://192.168.1.150:5001"
+    }
     
     func startNewSession() {
         sessionStartTime = Date()

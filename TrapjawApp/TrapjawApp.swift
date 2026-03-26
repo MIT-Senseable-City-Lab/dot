@@ -14,9 +14,8 @@ struct TrapjawApp: App {
     @StateObject private var timeWindow = TimeWindowManager()
 
     init() {
-        // Force CoolDownManager initialization on main thread
-        // to avoid thread-safety issues with @Observable and Timer
-        _ = CoolDownManager.shared
+        // CoolDownManager is lazy - don't initialize timers here
+        // Timer will be set up when first accessed on proper RunLoop
     }
 
     var body: some Scene {

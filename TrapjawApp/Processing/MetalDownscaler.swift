@@ -49,7 +49,11 @@ final class MetalDownscaler {
         }
         
         self.device = metalDevice
-        self.commandQueue = metalDevice.makeCommandQueue()!
+        guard let commandQueue = metalDevice.makeCommandQueue() else {
+            logger.error("Failed to create Metal command queue")
+            return nil
+        }
+        self.commandQueue = commandQueue
         
         // Create pipeline states from shader source
         do {
@@ -163,7 +167,12 @@ final class MetalDownscaler {
         
         // Create output buffer
         var outputBuffer: CVPixelBuffer?
-        let status = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, outputBufferPool!, &outputBuffer)
+        guard let pool = outputBufferPool else {
+            logger.error("Output buffer pool not initialized")
+            completion(nil)
+            return
+        }
+        let status = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &outputBuffer)
         
         guard status == kCVReturnSuccess, let output = outputBuffer else {
             logger.error("Failed to create output pixel buffer")
