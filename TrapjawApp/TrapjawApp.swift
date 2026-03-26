@@ -13,6 +13,12 @@ struct TrapjawApp: App {
     @State private var processor = TrapjawProcessor()
     @StateObject private var timeWindow = TimeWindowManager()
 
+    init() {
+        // Force CoolDownManager initialization on main thread
+        // to avoid thread-safety issues with @Observable and Timer
+        _ = CoolDownManager.shared
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView(processor: processor, timeWindow: timeWindow)

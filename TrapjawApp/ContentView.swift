@@ -103,7 +103,7 @@ struct ContentView: View {
         let metrics = processor.metrics
 
         return VStack(spacing: 12) {
-            Text("TRAPJAW")
+            Text("SCL DOT")
                 .font(.system(.title, design: .monospaced).weight(.bold))
                 .foregroundStyle(.white)
                 .padding(.bottom, 8)
