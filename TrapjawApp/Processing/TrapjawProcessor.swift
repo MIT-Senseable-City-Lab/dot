@@ -317,8 +317,8 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
         
         let activeIds = bridge.getActiveTrackIds()
         let resolution = StreamResolution(
-            width: Int(config.frame_width),
-            height: Int(config.frame_height)
+            width: Int(CameraManager.captureWidth),
+            height: Int(CameraManager.captureHeight)
         )
         
         let finalizedTracks = trackBuffer.finalizeTerminatedTracks(
@@ -404,7 +404,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
             
             if let trackToUpload = self.trackBuffer.addCrop(
                 trackId: trackId,
-                bbox: bbox1080p,  // Keep 1080p bbox for telemetry consistency
+                bbox: bbox4K,  // Store 4K bbox for correct composite placement
                 frameIndex: frameIndex,
                 timestamp: timestamp,
                 jpegData: jpegData,
@@ -506,8 +506,8 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
         
         let activeIds = bridge.getActiveTrackIds()
         let resolution = StreamResolution(
-            width: Int(config.frame_width),
-            height: Int(config.frame_height)
+            width: Int(CameraManager.captureWidth),
+            height: Int(CameraManager.captureHeight)
         )
         
         let finalizedTracks = trackBuffer.finalizeTerminatedTracks(
