@@ -77,6 +77,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     private let httpUploader = HTTPUploader.shared
     private let trackBuffer = TrackBuffer.shared
     private let networkConfig = NetworkConfig.shared
+    private(set) var backgroundCaptureManager: BackgroundCaptureManager?
     
     // MARK: - Timing & Diagnostics
     
@@ -243,6 +244,13 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
 
             cameraManager.start()
             dataStreamer.start()
+            
+            // Start background capture manager (2x daily reference images)
+            if let buffer = fourKBuffer {
+                backgroundCaptureManager = BackgroundCaptureManager(fourKBuffer: buffer)
+                backgroundCaptureManager?.start()
+            }
+            
             isRunning = true
             state = .warmingUp
 
@@ -257,6 +265,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     func stop() {
         guard isRunning else { return }
 
+        backgroundCaptureManager?.stop()
         state = .stopping
         dataStreamer.stop()
         cameraManager.stop()
@@ -275,6 +284,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     func pause() {
         guard isRunning && !isStarting else { return }
         
+        backgroundCaptureManager?.stop()
         state = .stopping
         
         // Stop camera first to stop new frames

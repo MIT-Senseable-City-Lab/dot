@@ -103,6 +103,15 @@ final class FourKFrameBuffer {
         return queue.sync { frames.count }
     }
     
+    /// Get the most recent frame from the buffer.
+    /// Returns nil if the buffer is empty.
+    func getLatestFrame() -> CVPixelBuffer? {
+        return queue.sync {
+            guard let latestIndex = frameOrder.last else { return nil }
+            return frames[latestIndex]
+        }
+    }
+    
     /// Clear all frames from the buffer.
     func clear() {
         queue.sync(flags: .barrier) {

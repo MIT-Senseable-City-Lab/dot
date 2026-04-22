@@ -115,7 +115,7 @@ struct ContentView: View {
         let metrics = processor.metrics
 
         return VStack(spacing: 12) {
-            Text("SCL DOT")
+            Text("SCL DOT.")
                 .font(.system(.title, design: .monospaced).weight(.bold))
                 .foregroundStyle(.white)
                 .padding(.bottom, 8)
@@ -142,6 +142,36 @@ struct ContentView: View {
             HStack(spacing: 24) {
                 metricTile(label: "PENDING", value: "\(processor.pendingUploads)")
                 metricTile(label: "BUFFERED", value: "\(TrackBuffer.shared.getTotalBufferedCropCount())")
+            }
+            
+            // Background capture
+            if processor.isRunning {
+                HStack(spacing: 24) {
+                    if let bgManager = processor.backgroundCaptureManager, bgManager.isUploading {
+                        metricTile(label: "BG UPLOAD", value: "...")
+                    } else {
+                        Button(action: {
+                            processor.backgroundCaptureManager?.captureNow()
+                        }) {
+                            VStack(spacing: 4) {
+                                Image(systemName: "camera")
+                                    .font(.system(.title2, design: .monospaced).weight(.semibold))
+                                    .foregroundStyle(.white)
+                                Text("BG CAPTURE")
+                                    .font(.system(.caption2, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    
+                    if let lastDate = processor.backgroundCaptureManager?.lastCaptureDate {
+                        metricTile(label: "LAST BG", value: formatTime(lastDate))
+                    } else {
+                        metricTile(label: "LAST BG", value: "--")
+                    }
+                }
             }
 
             // Error display
@@ -175,5 +205,11 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+    }
+    
+    private func formatTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
     }
 }

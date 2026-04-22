@@ -8,193 +8,196 @@
 
 /* Begin PBXBuildFile section */
 		1577463ABFB486BCF35BBE2D /* SettingsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAA04920B6615C1AA0A39D8B /* SettingsManager.swift */; };
-		D393283CB254474BA996CACE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3741E1D8C0874043A9B52491 /* SettingsView.swift */; };
-		'A10001AA' = {isa = PBXBuildFile; fileRef = A10001A0; };
-		'A10001AB' = {isa = PBXBuildFile; fileRef = A10001A1; };
-		'A10001AC' = {isa = PBXBuildFile; fileRef = A10001A2; };
-		'A10001AD' = {isa = PBXBuildFile; fileRef = A10001A3; };
-		'A10001AE' = {isa = PBXBuildFile; fileRef = A10001A4; };
-		'A10001AF' = {isa = PBXBuildFile; fileRef = A10001A5; };
-		'A10001B0' = {isa = PBXBuildFile; fileRef = A10001A6; };
-		'A10001B2' = {isa = PBXBuildFile; fileRef = A10001A8; };
-		'A10001B5' = {isa = PBXBuildFile; fileRef = A10001B4; };
-		'A10001C0' = {isa = PBXBuildFile; fileRef = A10001B8; };
-		'A10001C1' = {isa = PBXBuildFile; fileRef = A10001B9; };
-		'A10001C2' = {isa = PBXBuildFile; fileRef = A10001BA; };
-		'A10001C3' = {isa = PBXBuildFile; fileRef = A10001BB; };
-		'A10001C4' = {isa = PBXBuildFile; fileRef = A10001BC; };
-		'A10001C5' = {isa = PBXBuildFile; fileRef = A10001BD; };
-		'A10001C6' = {isa = PBXBuildFile; fileRef = A10001BE; };
-		'A10001C7' = {isa = PBXBuildFile; fileRef = A10001BF; };
-		'A10001D5' = {isa = PBXBuildFile; fileRef = A10001D8; };
-		'A10001D6' = {isa = PBXBuildFile; fileRef = A10001D9; };
-		'A10001D7' = {isa = PBXBuildFile; fileRef = A10001DA; };
-		'A10001E0' = {isa = PBXBuildFile; fileRef = A10001E3; };
-		'A10001E1' = {isa = PBXBuildFile; fileRef = A10001E4; };
-		'A10001E2' = {isa = PBXBuildFile; fileRef = A10001E5; };
-		'A10001E6' = {isa = PBXBuildFile; fileRef = A10001E7; };
-		'A10001E8' = {isa = PBXBuildFile; fileRef = A10001E9; };
-		'A10001F0' = {isa = PBXBuildFile; fileRef = A10001F1; };
-		'A10001F2' = {isa = PBXBuildFile; fileRef = A10001F3; };
-		'A10001F6' = {isa = PBXBuildFile; fileRef = A10001F7; };
-		'A10001FA' = {isa = PBXBuildFile; fileRef = A10001FB; };
+		A10001AA /* TrapjawApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001A0 /* TrapjawApp.swift */; };
+		A10001AB /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001A1 /* ContentView.swift */; };
+		A10001AC /* CameraManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001A2 /* CameraManager.swift */; };
+		A10001AD /* CameraPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001A3 /* CameraPreviewView.swift */; };
+		A10001AE /* TrapjawBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001A4 /* TrapjawBridge.swift */; };
+		A10001AF /* TrapjawProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001A5 /* TrapjawProcessor.swift */; };
+		A10001B0 /* PerformanceMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001A6 /* PerformanceMetrics.swift */; };
+		A10001B2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10001A8 /* Assets.xcassets */; };
+		A10001B5 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A10001B4 /* LaunchScreen.storyboard */; };
+		A10001C0 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10001B8 /* Metal.framework */; };
+		A10001C1 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10001B9 /* AVFoundation.framework */; };
+		A10001C2 /* CoreVideo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10001BA /* CoreVideo.framework */; };
+		A10001C3 /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10001BB /* CoreMedia.framework */; };
+		A10001C4 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10001BC /* Foundation.framework */; };
+		A10001C5 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10001BD /* QuartzCore.framework */; };
+		A10001C6 /* libtrapjaw.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A10001BE /* libtrapjaw.a */; };
+		A10001C7 /* trapjaw.metallib in Resources */ = {isa = PBXBuildFile; fileRef = A10001BF /* trapjaw.metallib */; };
+		A10001D5 /* TrackNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001D8 /* TrackNode.swift */; };
+		A10001D6 /* StreamResolution.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001D9 /* StreamResolution.swift */; };
+		A10001D7 /* InsectTelemetryPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001DA /* InsectTelemetryPayload.swift */; };
+		A10001E0 /* TrackBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E3 /* TrackBuffer.swift */; };
+		A10001E1 /* NetworkConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E4 /* NetworkConfig.swift */; };
+		A10001E2 /* DataStreamer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E5 /* DataStreamer.swift */; };
+		A10001E6 /* HTTPUploader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E7 /* HTTPUploader.swift */; };
+		A10001E8 /* TimeWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E9 /* TimeWindowManager.swift */; };
+		A10001F0 /* FourKFrameBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001F1 /* FourKFrameBuffer.swift */; };
+		A1000201 /* BackgroundCaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000200 /* BackgroundCaptureManager.swift */; };
+		A10001F2 /* MetalDownscaler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001F3 /* MetalDownscaler.swift */; };
+		A10001F6 /* TimingMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001F7 /* TimingMetrics.swift */; };
+		A10001FA /* CoolDownManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001FB /* CoolDownManager.swift */; };
+D393283CB254474BA996CACE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3741E1D8C0874043A9B52491 /* SettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		'A1000190' = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TrapjawApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		'A10001A0' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrapjawApp.swift; sourceTree = "<group>"; };
-		'A10001A1' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		'A10001A2' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraManager.swift; sourceTree = "<group>"; };
-		'A10001A3' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreviewView.swift; sourceTree = "<group>"; };
-		'A10001A4' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrapjawBridge.swift; sourceTree = "<group>"; };
-		'A10001A5' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrapjawProcessor.swift; sourceTree = "<group>"; };
-		'A10001A6' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceMetrics.swift; sourceTree = "<group>"; };
-		'A10001A8' = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		'A10001A9' = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		'A10001B3' = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "TrapjawApp-Bridging-Header.h"; sourceTree = "<group>"; };
-		'A10001B4' = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
-		'A10001B8' = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
-		'A10001B9' = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
-		'A10001BA' = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreVideo.framework; path = System/Library/Frameworks/CoreVideo.framework; sourceTree = SDKROOT; };
-		'A10001BB' = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = System/Library/Frameworks/CoreMedia.framework; sourceTree = SDKROOT; };
-		'A10001BC' = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
-		'A10001BD' = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
-		'A10001BE' = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libtrapjaw.a; path = lib/iphoneos/libtrapjaw.a; sourceTree = SOURCE_ROOT; };
-		'A10001BF' = {isa = PBXFileReference; lastKnownFileType = "archive.metal-library"; name = trapjaw.metallib; path = lib/trapjaw.metallib; sourceTree = SOURCE_ROOT; };
-		'A10001D8' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackNode.swift; sourceTree = "<group>"; };
-		'A10001D9' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamResolution.swift; sourceTree = "<group>"; };
-		'A10001DA' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsectTelemetryPayload.swift; sourceTree = "<group>"; };
-		'A10001E3' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackBuffer.swift; sourceTree = "<group>"; };
-		'A10001E4' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkConfig.swift; sourceTree = "<group>"; };
-		'A10001E5' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStreamer.swift; sourceTree = "<group>"; };
-		'A10001E7' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPUploader.swift; sourceTree = "<group>"; };
-		'A10001E9' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeWindowManager.swift; sourceTree = "<group>"; };
-		'A10001F1' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FourKFrameBuffer.swift; sourceTree = "<group>"; };
-		'A10001F3' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalDownscaler.swift; sourceTree = "<group>"; };
-		'A10001F7' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimingMetrics.swift; sourceTree = "<group>"; };
-		'A10001FB' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoolDownManager.swift; sourceTree = "<group>"; };
-		BAA04920B6615C1AA0A39D8B /* SettingsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SettingsManager.swift; path = TrapjawApp/Settings/SettingsManager.swift; sourceTree = SOURCE_ROOT; };
 		3741E1D8C0874043A9B52491 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SettingsView.swift; path = TrapjawApp/Settings/SettingsView.swift; sourceTree = SOURCE_ROOT; };
+		A1000190 /* TrapjawApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TrapjawApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10001A0 /* TrapjawApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrapjawApp.swift; sourceTree = "<group>"; };
+		A10001A1 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A10001A2 /* CameraManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraManager.swift; sourceTree = "<group>"; };
+		A10001A3 /* CameraPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreviewView.swift; sourceTree = "<group>"; };
+		A10001A4 /* TrapjawBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrapjawBridge.swift; sourceTree = "<group>"; };
+		A10001A5 /* TrapjawProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrapjawProcessor.swift; sourceTree = "<group>"; };
+		A10001A6 /* PerformanceMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceMetrics.swift; sourceTree = "<group>"; };
+		A10001A8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A10001A9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A10001B3 /* TrapjawApp-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "TrapjawApp-Bridging-Header.h"; sourceTree = "<group>"; };
+		A10001B4 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		A10001B8 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		A10001B9 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		A10001BA /* CoreVideo.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreVideo.framework; path = System/Library/Frameworks/CoreVideo.framework; sourceTree = SDKROOT; };
+		A10001BB /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = System/Library/Frameworks/CoreMedia.framework; sourceTree = SDKROOT; };
+		A10001BC /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
+		A10001BD /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
+		A10001BE /* libtrapjaw.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libtrapjaw.a; path = lib/iphoneos/libtrapjaw.a; sourceTree = SOURCE_ROOT; };
+		A10001BF /* trapjaw.metallib */ = {isa = PBXFileReference; lastKnownFileType = "archive.metal-library"; name = trapjaw.metallib; path = lib/trapjaw.metallib; sourceTree = SOURCE_ROOT; };
+		A10001D8 /* TrackNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackNode.swift; sourceTree = "<group>"; };
+		A10001D9 /* StreamResolution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamResolution.swift; sourceTree = "<group>"; };
+		A10001DA /* InsectTelemetryPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsectTelemetryPayload.swift; sourceTree = "<group>"; };
+		A10001E3 /* TrackBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackBuffer.swift; sourceTree = "<group>"; };
+		A10001E4 /* NetworkConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkConfig.swift; sourceTree = "<group>"; };
+		A10001E5 /* DataStreamer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStreamer.swift; sourceTree = "<group>"; };
+		A10001E7 /* HTTPUploader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPUploader.swift; sourceTree = "<group>"; };
+		A10001E9 /* TimeWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeWindowManager.swift; sourceTree = "<group>"; };
+		A10001F1 /* FourKFrameBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FourKFrameBuffer.swift; sourceTree = "<group>"; };
+		A1000200 /* BackgroundCaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundCaptureManager.swift; sourceTree = "<group>"; };
+		A10001F3 /* MetalDownscaler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalDownscaler.swift; sourceTree = "<group>"; };
+		A10001F7 /* TimingMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimingMetrics.swift; sourceTree = "<group>"; };
+		A10001FB /* CoolDownManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoolDownManager.swift; sourceTree = "<group>"; };
+BAA04920B6615C1AA0A39D8B /* SettingsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SettingsManager.swift; path = TrapjawApp/Settings/SettingsManager.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		'A100018D' = {
+		A100018D /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10001C0,
-				A10001C1,
-				A10001C2,
-				A10001C3,
-				A10001C4,
-				A10001C5,
-				A10001C6,
+				A10001C0 /* Metal.framework in Frameworks */,
+				A10001C1 /* AVFoundation.framework in Frameworks */,
+				A10001C2 /* CoreVideo.framework in Frameworks */,
+				A10001C3 /* CoreMedia.framework in Frameworks */,
+				A10001C4 /* Foundation.framework in Frameworks */,
+				A10001C5 /* QuartzCore.framework in Frameworks */,
+				A10001C6 /* libtrapjaw.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		'A1000187' = {
+		A1000187 = {
 			isa = PBXGroup;
 			children = (
-				A1000192,
-				A1000191,
-				A10001B7,
+				A1000192 /* TrapjawApp */,
+				A1000191 /* Products */,
+				A10001B7 /* Frameworks */,
 				BAA04920B6615C1AA0A39D8B /* SettingsManager.swift */,
 				3741E1D8C0874043A9B52491 /* SettingsView.swift */,
 			);
 			sourceTree = "<group>";
 		};
-		'A1000191' = {
+		A1000191 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A1000190,
+				A1000190 /* TrapjawApp.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		'A1000192' = {
+		A1000192 /* TrapjawApp */ = {
 			isa = PBXGroup;
 			children = (
-				A10001A0,
-				A10001A1,
-				A10001B4,
-				A10001A9,
-				A10001A8,
-				A1000193,
-				A1000194,
-				A1000195,
-				A1000197,
-				A1000196,
+				A10001A0 /* TrapjawApp.swift */,
+				A10001A1 /* ContentView.swift */,
+				A10001B4 /* LaunchScreen.storyboard */,
+				A10001A9 /* Info.plist */,
+				A10001A8 /* Assets.xcassets */,
+				A1000193 /* Camera */,
+				A1000194 /* Processing */,
+				A1000195 /* Networking */,
+				A1000197 /* Models */,
+				A1000196 /* Bridge */,
 			);
 			path = TrapjawApp;
 			sourceTree = "<group>";
 		};
-		'A1000193' = {
+		A1000193 /* Camera */ = {
 			isa = PBXGroup;
 			children = (
-				A10001A2,
-				A10001A3,
+				A10001A2 /* CameraManager.swift */,
+				A10001A3 /* CameraPreviewView.swift */,
 			);
 			path = Camera;
 			sourceTree = "<group>";
 		};
-		'A1000194' = {
+		A1000194 /* Processing */ = {
 			isa = PBXGroup;
 			children = (
-				A10001A4,
-				A10001A5,
-				A10001A6,
-				A10001E3,
-				A10001E9,
-				A10001F1,
-				A10001F3,
-				A10001F7,
-				A10001FB,
+				A10001A4 /* TrapjawBridge.swift */,
+				A10001A5 /* TrapjawProcessor.swift */,
+				A10001A6 /* PerformanceMetrics.swift */,
+				A10001E3 /* TrackBuffer.swift */,
+				A10001E9 /* TimeWindowManager.swift */,
+				A10001F1 /* FourKFrameBuffer.swift */,
+				A1000200 /* BackgroundCaptureManager.swift */,
+				A10001F3 /* MetalDownscaler.swift */,
+				A10001F7 /* TimingMetrics.swift */,
+				A10001FB /* CoolDownManager.swift */,
 			);
 			path = Processing;
 			sourceTree = "<group>";
 		};
-		'A1000195' = {
+		A1000195 /* Networking */ = {
 			isa = PBXGroup;
 			children = (
-				A10001E4,
-				A10001E5,
-				A10001E7,
+				A10001E4 /* NetworkConfig.swift */,
+				A10001E5 /* DataStreamer.swift */,
+				A10001E7 /* HTTPUploader.swift */,
 			);
 			path = Networking;
 			sourceTree = "<group>";
 		};
-		'A1000196' = {
+		A1000196 /* Bridge */ = {
 			isa = PBXGroup;
 			children = (
-				A10001B3,
+				A10001B3 /* TrapjawApp-Bridging-Header.h */,
 			);
 			path = Bridge;
 			sourceTree = "<group>";
 		};
-		'A1000197' = {
+		A1000197 /* Models */ = {
 			isa = PBXGroup;
 			children = (
-				A10001D8,
-				A10001D9,
-				A10001DA,
+				A10001D8 /* TrackNode.swift */,
+				A10001D9 /* StreamResolution.swift */,
+				A10001DA /* InsectTelemetryPayload.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
 		};
-		'A10001B7' = {
+		A10001B7 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				A10001B8,
-				A10001B9,
-				A10001BA,
-				A10001BB,
-				A10001BC,
-				A10001BD,
-				A10001BE,
-				A10001BF,
+				A10001B8 /* Metal.framework */,
+				A10001B9 /* AVFoundation.framework */,
+				A10001BA /* CoreVideo.framework */,
+				A10001BB /* CoreMedia.framework */,
+				A10001BC /* Foundation.framework */,
+				A10001BD /* QuartzCore.framework */,
+				A10001BE /* libtrapjaw.a */,
+				A10001BF /* trapjaw.metallib */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -202,13 +205,13 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		'A100018F' = {
+		A100018F /* TrapjawApp */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A10001D2;
+			buildConfigurationList = A10001D2 /* Build configuration list for PBXNativeTarget "TrapjawApp" */;
 			buildPhases = (
-				A100018C,
-				A100018D,
-				A100018E,
+				A100018C /* Sources */,
+				A100018D /* Frameworks */,
+				A100018E /* Resources */,
 			);
 			buildRules = (
 			);
@@ -216,13 +219,13 @@
 			);
 			name = TrapjawApp;
 			productName = TrapjawApp;
-			productReference = A1000190;
+			productReference = A1000190 /* TrapjawApp.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		'A1000188' = {
+		A1000188 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
@@ -234,7 +237,7 @@
 					};
 				};
 			};
-			buildConfigurationList = A100018B;
+			buildConfigurationList = A100018B /* Build configuration list for PBXProject "TrapjawApp" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -243,52 +246,53 @@
 				Base,
 			);
 			mainGroup = A1000187;
-			productRefGroup = A1000191;
+			productRefGroup = A1000191 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				A100018F,
+				A100018F /* TrapjawApp */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		'A100018E' = {
+		A100018E /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10001B5,
-				A10001B2,
-				A10001C7,
+				A10001B5 /* LaunchScreen.storyboard in Resources */,
+				A10001B2 /* Assets.xcassets in Resources */,
+				A10001C7 /* trapjaw.metallib in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		'A100018C' = {
+		A100018C /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10001AA,
-				A10001AB,
-				A10001AC,
-				A10001AD,
-				A10001AE,
-				A10001AF,
-				A10001B0,
-				A10001D5,
-				A10001D6,
-				A10001D7,
-				A10001E0,
-				A10001E1,
-				A10001E2,
-				A10001E6,
-				A10001E8,
-				A10001F0,
-				A10001F2,
-				A10001F6,
-				A10001FA,
+				A10001AA /* TrapjawApp.swift in Sources */,
+				A10001AB /* ContentView.swift in Sources */,
+				A10001AC /* CameraManager.swift in Sources */,
+				A10001AD /* CameraPreviewView.swift in Sources */,
+				A10001AE /* TrapjawBridge.swift in Sources */,
+				A10001AF /* TrapjawProcessor.swift in Sources */,
+				A10001B0 /* PerformanceMetrics.swift in Sources */,
+				A10001D5 /* TrackNode.swift in Sources */,
+				A10001D6 /* StreamResolution.swift in Sources */,
+				A10001D7 /* InsectTelemetryPayload.swift in Sources */,
+				A10001E0 /* TrackBuffer.swift in Sources */,
+				A10001E1 /* NetworkConfig.swift in Sources */,
+				A10001E2 /* DataStreamer.swift in Sources */,
+				A10001E6 /* HTTPUploader.swift in Sources */,
+				A10001E8 /* TimeWindowManager.swift in Sources */,
+				A10001F0 /* FourKFrameBuffer.swift in Sources */,
+				A1000201 /* BackgroundCaptureManager.swift in Sources */,
+				A10001F2 /* MetalDownscaler.swift in Sources */,
+				A10001F6 /* TimingMetrics.swift in Sources */,
+				A10001FA /* CoolDownManager.swift in Sources */,
 				1577463ABFB486BCF35BBE2D /* SettingsManager.swift in Sources */,
 				D393283CB254474BA996CACE /* SettingsView.swift in Sources */,
 			);
@@ -297,7 +301,7 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		'A10001D0' = {
+		A10001D0 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -359,7 +363,7 @@
 			};
 			name = Debug;
 		};
-		'A10001D1' = {
+		A10001D1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -414,7 +418,7 @@
 			};
 			name = Release;
 		};
-		'A10001D3' = {
+		A10001D3 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -435,12 +439,14 @@
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/lib/iphoneos";
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = edu.mit.dot;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "TrapjawApp/Bridge/TrapjawApp-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -448,7 +454,7 @@
 			};
 			name = Debug;
 		};
-		'A10001D4' = {
+		A10001D4 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -469,12 +475,14 @@
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/lib/iphoneos";
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = edu.mit.dot;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "TrapjawApp/Bridge/TrapjawApp-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -485,25 +493,25 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		'A100018B' = {
+		A100018B /* Build configuration list for PBXProject "TrapjawApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				A10001D0,
-				A10001D1,
+				A10001D0 /* Debug */,
+				A10001D1 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		'A10001D2' = {
+		A10001D2 /* Build configuration list for PBXNativeTarget "TrapjawApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				A10001D3,
-				A10001D4,
+				A10001D3 /* Debug */,
+				A10001D4 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = A1000188;
+	rootObject = A1000188 /* Project object */;
 }
