@@ -451,7 +451,12 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     // MARK: - Track Upload
     
     private func uploadTrack(_ track: FinalizedTrack) {
-        let trackIdString = String(track.stitchedId)
+        let hexId = String(format: "%08x", track.stitchedId)
+        let firstTimestamp = track.crops.first?.timestamp ?? Date().timeIntervalSince1970
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "HHmmss"
+        let timeStr = dateFormatter.string(from: Date(timeIntervalSince1970: firstTimestamp))
+        let trackIdString = "\(hexId)_\(timeStr)"
         
         let points = track.crops.map { crop -> TrackNode in
             TrackNode(
