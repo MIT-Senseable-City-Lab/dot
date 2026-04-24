@@ -13,6 +13,9 @@ import Metal
 import CoreVideo
 import UIKit
 import CoreImage
+import os.log
+
+private let procLog = Logger(subsystem: "com.trapjaw.processor", category: "TrapjawProcessor")
 
 // Shared CIContext for efficient crop extraction (preserves color accuracy)
 private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
@@ -66,6 +69,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     private var frameIndex: UInt64 = 0
     private var warmupFramesProcessed: UInt64 = 0  // Counts frames during warmup
     private var lastProcessedFrame: UInt64 = 0     // For detecting out-of-order processing
+    private var lastTerminationTrackCount: Int = 0
     private var startTime: CFAbsoluteTime = 0
     private let config: tj_config_t
     private let statsUpdateInterval: UInt64 = 30
@@ -78,6 +82,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     private let trackBuffer = TrackBuffer.shared
     private let networkConfig = NetworkConfig.shared
     private(set) var backgroundCaptureManager: BackgroundCaptureManager?
+    private(set) var videoClipManager: VideoClipManager?
     
     // MARK: - Timing & Diagnostics
     
@@ -90,15 +95,18 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
 
     // MARK: - Init
 
-    init(config: tj_config_t? = nil) {
+init(config: tj_config_t? = nil) {
         self.metalDevice = MTLCreateSystemDefaultDevice()
 
+        // Use C's defaults entirely - avoid Swift/C struct ABI issues
+        // The C defaults are already tuned for this use case
         var cfg = config ?? tj_config_defaults()
-        cfg.frame_width = 1920
-        cfg.frame_height = 1080
-        cfg.fps = 30.0
-        cfg.camera_fov_degrees = 67.0
+        
+        // Enable debug callback for UI metrics (GPU ms, active tracks)
         cfg.debug_enabled = true
+        
+        procLog.info("Config initialized with C defaults, debug_enabled=true")
+        
         self.config = cfg
         
         // Initialize 4K frame buffer (10 frames ~330MB) - reduced for memory efficiency
@@ -220,6 +228,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
         do {
             let bridge = try TrapjawBridge(config: config, device: metalDevice)
             self.bridge = bridge
+            procLog.info("TrapjawBridge created successfully")
 
             bridge.onCrop = { [weak self] crop in
                 self?.handleCrop(crop)
@@ -251,10 +260,16 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
                 backgroundCaptureManager?.start()
             }
             
+            // Start video clip manager (scheduled 1-min MP4 uploads)
+            videoClipManager = VideoClipManager()
+            cameraManager.videoClipManager = videoClipManager
+            videoClipManager?.start()
+            
             isRunning = true
             state = .warmingUp
 
         } catch {
+            procLog.error("TrapjawBridge init FAILED: \(error.localizedDescription)")
             self.error = error
             state = .failed
         }
@@ -266,6 +281,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
         guard isRunning else { return }
 
         backgroundCaptureManager?.stop()
+        videoClipManager?.stop()
         state = .stopping
         dataStreamer.stop()
         cameraManager.stop()
@@ -285,6 +301,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
         guard isRunning && !isStarting else { return }
         
         backgroundCaptureManager?.stop()
+        videoClipManager?.stop()
         state = .stopping
         
         // Stop camera first to stop new frames
@@ -340,6 +357,8 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     
     private func handleCrop(_ crop: CropData) {
         guard let bridge else { return }
+        
+        procLog.info("handleCrop: track=\(crop.trackID) bbox=\(Int(crop.bbox.origin.x)),\(Int(crop.bbox.origin.y)) \(Int(crop.bbox.width))x\(Int(crop.bbox.height)) frame=\(crop.frameIndex)")
         
         let stitchedId = bridge.getStitchedId(rawTrackId: crop.trackID)
         trackBuffer.setStitchedId(rawTrackId: crop.trackID, stitchedId: stitchedId)
@@ -452,15 +471,15 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     
     private func uploadTrack(_ track: FinalizedTrack) {
         let hexId = String(format: "%08x", track.stitchedId)
-        let firstTimestamp = track.crops.first?.timestamp ?? Date().timeIntervalSince1970
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "HHmmss"
-        let timeStr = dateFormatter.string(from: Date(timeIntervalSince1970: firstTimestamp))
+        let timeStr = dateFormatter.string(from: Date())
         let trackIdString = "\(hexId)_\(timeStr)"
         
+        let firstFrameIndex = track.startIndex
         let points = track.crops.map { crop -> TrackNode in
             TrackNode(
-                timestamp: Date(timeIntervalSince1970: crop.timestamp),
+                timestamp: Date().addingTimeInterval(Double(crop.frameIndex - UInt64(firstFrameIndex)) / 30.0),
                 x: crop.bbox.origin.x,
                 y: crop.bbox.origin.y,
                 width: crop.bbox.size.width,
@@ -482,16 +501,23 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
         
         let jpegDataArray = track.crops.map { $0.jpegData }
         httpUploader.uploadCrops(trackId: trackIdString, crops: jpegDataArray, startIndex: track.startIndex)
+        
+        // Signal track completion so receiver can create done.txt
+        httpUploader.uploadDone(trackId: trackIdString)
     }
 
     private func updateStats(warmupCount: UInt64) {
         guard let bridge else { return }
         let stats = bridge.getStats()
         
-        print("[STATS] warmupCount=\(warmupCount), threshold=\(config.bg_warmup_frames), state=\(state.rawValue)")
+        if warmupCount <= 5 || warmupCount % 300 == 0 {
+            let warmupFrames = config.bg_warmup_frames
+            procLog.info("updateStats: warmup=\(warmupCount)/\(warmupFrames) frames=\(stats.frames_processed) tracks=\(stats.total_tracks_created) crops=\(stats.total_crops_emitted) avg_ms=\(String(format: "%.2f", stats.avg_pipeline_time_ms))")
+        }
 
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
+            guard let self = self else { return }
+            let warmupFrames = self.config.bg_warmup_frames
             self.metrics.updateFromStats(stats)
             
             self.metrics.updateWarmupStatus(
@@ -500,7 +526,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
             )
 
             if warmupCount >= UInt64(self.config.bg_warmup_frames) && self.state == .warmingUp {
-                print("[STATE] Transitioning: \(self.state.rawValue) → processing")
+                procLog.info("STATE: Transitioning warmingUp → processing (warmup=\(warmupCount))")
                 self.state = .processing
             }
         }
@@ -510,6 +536,11 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
         guard let bridge else { return }
         
         let activeIds = bridge.getActiveTrackIds()
+        
+        if !activeIds.isEmpty && activeIds.count != lastTerminationTrackCount {
+            procLog.info("checkTerminatedTracks: activeIds count=\(activeIds.count)")
+            lastTerminationTrackCount = activeIds.count
+        }
         let resolution = StreamResolution(
             width: Int(CameraManager.captureWidth),
             height: Int(CameraManager.captureHeight)
@@ -554,6 +585,10 @@ extension TrapjawProcessor: CameraManagerDelegate {
         
         // Increment warmup frame counter (for warmup detection)
         warmupFramesProcessed += 1
+        
+        if currentIndex == 0 {
+            procLog.info("First frame received: 4K=\(CVPixelBufferGetWidth(pixelBuffer4K))x\(CVPixelBufferGetHeight(pixelBuffer4K))")
+        }
         
         // Debug logging every 30 frames
         if currentIndex % 30 == 0 {
@@ -602,6 +637,11 @@ extension TrapjawProcessor: CameraManagerDelegate {
                 DispatchQueue.main.async { [weak self] in
                     self?.metrics.recordProcessedFrame()
                 }
+                if result == TJ_ERROR_NOT_READY && self.warmupFramesProcessed < 5 {
+                    procLog.info("Frame \(currentIndex): TJ_ERROR_NOT_READY (warmup)")
+                }
+            } else if let r = result, r != TJ_OK {
+                procLog.error("Frame \(currentIndex): tj_process_frame returned \(r.rawValue)")
             }
             
             // End frame timing

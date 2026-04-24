@@ -22,9 +22,12 @@ final class SettingsManager {
     private let backgroundCaptureSchedulesKey = "SettingsManager_BackgroundCaptureSchedules"
     private let wifiSSIDKey = "SettingsManager_WifiSSID"
     private let wifiPasswordKey = "SettingsManager_WifiPassword"
+    private let videoUploadEnabledKey = "SettingsManager_VideoUploadEnabled"
+    private let videoUploadSchedulesKey = "SettingsManager_VideoUploadSchedules"
     
     // MARK: - Defaults
     static let defaultCaptureSchedules: [Int] = [725, 1205]
+    static let defaultVideoUploadSchedules: [Int] = [480, 840]
     
     // MARK: - State
     var serverIP: String
@@ -32,6 +35,8 @@ final class SettingsManager {
     var useHTTPS: Bool
     var backgroundCaptureEnabled: Bool
     var backgroundCaptureSchedules: [Int]
+    var videoUploadEnabled: Bool
+    var videoUploadSchedules: [Int]
     var wifiSSID: String
     var wifiPassword: String
     
@@ -65,6 +70,8 @@ final class SettingsManager {
         let savedUseHTTPS = UserDefaults.standard.bool(forKey: useHTTPSKey)
         let savedBgEnabled = UserDefaults.standard.object(forKey: backgroundCaptureEnabledKey) as? Bool
         let savedBgSchedules = UserDefaults.standard.object(forKey: backgroundCaptureSchedulesKey) as? [Int]
+        let savedVideoUploadEnabled = UserDefaults.standard.object(forKey: videoUploadEnabledKey) as? Bool
+        let savedVideoUploadSchedules = UserDefaults.standard.object(forKey: videoUploadSchedulesKey) as? [Int]
         let savedWifiSSID = UserDefaults.standard.string(forKey: wifiSSIDKey)
         let savedWifiPassword = UserDefaults.standard.string(forKey: wifiPasswordKey)
         
@@ -73,6 +80,8 @@ final class SettingsManager {
         self.useHTTPS = savedUseHTTPS
         self.backgroundCaptureEnabled = savedBgEnabled ?? true
         self.backgroundCaptureSchedules = savedBgSchedules ?? Self.defaultCaptureSchedules
+        self.videoUploadEnabled = savedVideoUploadEnabled ?? true
+        self.videoUploadSchedules = savedVideoUploadSchedules ?? Self.defaultVideoUploadSchedules
         self.wifiSSID = savedWifiSSID ?? ""
         self.wifiPassword = savedWifiPassword ?? ""
     }
@@ -126,6 +135,25 @@ final class SettingsManager {
     func updateWifiPassword(_ password: String) {
         self.wifiPassword = password
         UserDefaults.standard.set(password, forKey: wifiPasswordKey)
+    }
+    
+    func updateVideoUploadEnabled(_ enabled: Bool) {
+        self.videoUploadEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: videoUploadEnabledKey)
+    }
+    
+    func addVideoUploadSchedule(minuteOfDay: Int) {
+        let clamped = max(0, min(1439, minuteOfDay))
+        if !videoUploadSchedules.contains(clamped) {
+            videoUploadSchedules.append(clamped)
+            videoUploadSchedules.sort()
+            UserDefaults.standard.set(videoUploadSchedules, forKey: videoUploadSchedulesKey)
+        }
+    }
+    
+    func removeVideoUploadSchedule(minuteOfDay: Int) {
+        videoUploadSchedules.removeAll { $0 == minuteOfDay }
+        UserDefaults.standard.set(videoUploadSchedules, forKey: videoUploadSchedulesKey)
     }
     
     /// Format a minute-of-day value as "h:mm AM/PM"
@@ -248,6 +276,8 @@ final class SettingsManager {
         useHTTPS = false
         backgroundCaptureEnabled = true
         backgroundCaptureSchedules = Self.defaultCaptureSchedules
+        videoUploadEnabled = true
+        videoUploadSchedules = Self.defaultVideoUploadSchedules
         wifiSSID = ""
         wifiPassword = ""
         
@@ -256,6 +286,8 @@ final class SettingsManager {
         UserDefaults.standard.set(useHTTPS, forKey: useHTTPSKey)
         UserDefaults.standard.set(backgroundCaptureEnabled, forKey: backgroundCaptureEnabledKey)
         UserDefaults.standard.set(backgroundCaptureSchedules, forKey: backgroundCaptureSchedulesKey)
+        UserDefaults.standard.set(videoUploadEnabled, forKey: videoUploadEnabledKey)
+        UserDefaults.standard.set(videoUploadSchedules, forKey: videoUploadSchedulesKey)
         UserDefaults.standard.set(wifiSSID, forKey: wifiSSIDKey)
         UserDefaults.standard.set(wifiPassword, forKey: wifiPasswordKey)
         

@@ -63,9 +63,10 @@ final class BackgroundCaptureManager: ObservableObject {
         performCapture(retryCount: 0)
         
         // Schedule periodic check every 60 seconds
-        timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+        timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
             self?.checkAndCapture()
         }
+        RunLoop.main.add(timer!, forMode: .common)
     }
     
     /// Stop periodic background capture.

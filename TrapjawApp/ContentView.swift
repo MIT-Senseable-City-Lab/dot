@@ -135,13 +135,7 @@ struct ContentView: View {
             // Detection stats
             HStack(spacing: 24) {
                 metricTile(label: "TRACKS", value: "\(metrics.activeTrackCount)")
-                metricTile(label: "CROPS", value: "\(metrics.totalCrops)")
-            }
-
-            // Network stats
-            HStack(spacing: 24) {
                 metricTile(label: "PENDING", value: "\(processor.pendingUploads)")
-                metricTile(label: "BUFFERED", value: "\(TrackBuffer.shared.getTotalBufferedCropCount())")
             }
             
             // Background capture
@@ -170,6 +164,38 @@ struct ContentView: View {
                         metricTile(label: "LAST BG", value: formatTime(lastDate))
                     } else {
                         metricTile(label: "LAST BG", value: "--")
+                    }
+                }
+            }
+            
+            // Video clip
+            if processor.isRunning {
+                HStack(spacing: 24) {
+                    if let vcManager = processor.videoClipManager, vcManager.isRecording {
+                        metricTile(label: "RECORDING", value: "...")
+                    } else if let vcManager = processor.videoClipManager, vcManager.isUploading {
+                        metricTile(label: "VID UPLOAD", value: "...")
+                    } else {
+                        Button(action: {
+                            processor.videoClipManager?.recordNow()
+                        }) {
+                            VStack(spacing: 4) {
+                                Image(systemName: "video")
+                                    .font(.system(.title2, design: .monospaced).weight(.semibold))
+                                    .foregroundStyle(.white)
+                                Text("RECORD VID")
+                                    .font(.system(.caption2, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    
+                    if let lastDate = processor.videoClipManager?.lastUploadDate {
+                        metricTile(label: "LAST VID", value: formatTime(lastDate))
+                    } else {
+                        metricTile(label: "LAST VID", value: "--")
                     }
                 }
             }

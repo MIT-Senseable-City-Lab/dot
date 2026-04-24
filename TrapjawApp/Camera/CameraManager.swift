@@ -17,6 +17,7 @@ protocol CameraManagerDelegate: AnyObject {
 final class CameraManager: NSObject {
 
     weak var delegate: CameraManagerDelegate?
+    weak var videoClipManager: VideoClipManager?
 
     private let session = AVCaptureSession()
     private let outputQueue = DispatchQueue(label: "com.trapjaw.camera-output", qos: .userInitiated)
@@ -165,6 +166,9 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
+        if videoClipManager?.isRecording == true {
+            videoClipManager?.appendSampleBuffer(sampleBuffer)
+        }
         delegate?.cameraManager(self, didOutput: sampleBuffer)
     }
 

@@ -35,6 +35,7 @@
 		A10001E8 /* TimeWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E9 /* TimeWindowManager.swift */; };
 		A10001F0 /* FourKFrameBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001F1 /* FourKFrameBuffer.swift */; };
 		A1000201 /* BackgroundCaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000200 /* BackgroundCaptureManager.swift */; };
+		A1000210 /* VideoClipManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000205 /* VideoClipManager.swift */; };
 		A10001F2 /* MetalDownscaler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001F3 /* MetalDownscaler.swift */; };
 		A10001F6 /* TimingMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001F7 /* TimingMetrics.swift */; };
 		A10001FA /* CoolDownManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001FB /* CoolDownManager.swift */; };
@@ -73,6 +74,7 @@ D393283CB254474BA996CACE /* SettingsView.swift in Sources */ = {isa = PBXBuildFi
 		A10001E9 /* TimeWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeWindowManager.swift; sourceTree = "<group>"; };
 		A10001F1 /* FourKFrameBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FourKFrameBuffer.swift; sourceTree = "<group>"; };
 		A1000200 /* BackgroundCaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundCaptureManager.swift; sourceTree = "<group>"; };
+		A1000205 /* VideoClipManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoClipManager.swift; sourceTree = "<group>"; };
 		A10001F3 /* MetalDownscaler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalDownscaler.swift; sourceTree = "<group>"; };
 		A10001F7 /* TimingMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimingMetrics.swift; sourceTree = "<group>"; };
 		A10001FB /* CoolDownManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoolDownManager.swift; sourceTree = "<group>"; };
@@ -152,6 +154,7 @@ BAA04920B6615C1AA0A39D8B /* SettingsManager.swift */ = {isa = PBXFileReference; 
 				A10001E9 /* TimeWindowManager.swift */,
 				A10001F1 /* FourKFrameBuffer.swift */,
 				A1000200 /* BackgroundCaptureManager.swift */,
+				A1000205 /* VideoClipManager.swift */,
 				A10001F3 /* MetalDownscaler.swift */,
 				A10001F7 /* TimingMetrics.swift */,
 				A10001FB /* CoolDownManager.swift */,
@@ -290,6 +293,7 @@ BAA04920B6615C1AA0A39D8B /* SettingsManager.swift */ = {isa = PBXFileReference; 
 				A10001E8 /* TimeWindowManager.swift in Sources */,
 				A10001F0 /* FourKFrameBuffer.swift in Sources */,
 				A1000201 /* BackgroundCaptureManager.swift in Sources */,
+				A1000210 /* VideoClipManager.swift in Sources */,
 				A10001F2 /* MetalDownscaler.swift in Sources */,
 				A10001F6 /* TimingMetrics.swift in Sources */,
 				A10001FA /* CoolDownManager.swift in Sources */,
