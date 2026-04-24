@@ -34,12 +34,12 @@
 		A10001E6 /* HTTPUploader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E7 /* HTTPUploader.swift */; };
 		A10001E8 /* TimeWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E9 /* TimeWindowManager.swift */; };
 		A10001F0 /* FourKFrameBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001F1 /* FourKFrameBuffer.swift */; };
-		A1000201 /* BackgroundCaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000200 /* BackgroundCaptureManager.swift */; };
-		A1000210 /* VideoClipManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000205 /* VideoClipManager.swift */; };
 		A10001F2 /* MetalDownscaler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001F3 /* MetalDownscaler.swift */; };
 		A10001F6 /* TimingMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001F7 /* TimingMetrics.swift */; };
 		A10001FA /* CoolDownManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001FB /* CoolDownManager.swift */; };
-D393283CB254474BA996CACE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3741E1D8C0874043A9B52491 /* SettingsView.swift */; };
+		A1000201 /* BackgroundCaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000200 /* BackgroundCaptureManager.swift */; };
+		A1000210 /* VideoClipManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000205 /* VideoClipManager.swift */; };
+		D393283CB254474BA996CACE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3741E1D8C0874043A9B52491 /* SettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -73,12 +73,12 @@ D393283CB254474BA996CACE /* SettingsView.swift in Sources */ = {isa = PBXBuildFi
 		A10001E7 /* HTTPUploader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPUploader.swift; sourceTree = "<group>"; };
 		A10001E9 /* TimeWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeWindowManager.swift; sourceTree = "<group>"; };
 		A10001F1 /* FourKFrameBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FourKFrameBuffer.swift; sourceTree = "<group>"; };
-		A1000200 /* BackgroundCaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundCaptureManager.swift; sourceTree = "<group>"; };
-		A1000205 /* VideoClipManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoClipManager.swift; sourceTree = "<group>"; };
 		A10001F3 /* MetalDownscaler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalDownscaler.swift; sourceTree = "<group>"; };
 		A10001F7 /* TimingMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimingMetrics.swift; sourceTree = "<group>"; };
 		A10001FB /* CoolDownManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoolDownManager.swift; sourceTree = "<group>"; };
-BAA04920B6615C1AA0A39D8B /* SettingsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SettingsManager.swift; path = TrapjawApp/Settings/SettingsManager.swift; sourceTree = SOURCE_ROOT; };
+		A1000200 /* BackgroundCaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundCaptureManager.swift; sourceTree = "<group>"; };
+		A1000205 /* VideoClipManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoClipManager.swift; sourceTree = "<group>"; };
+		BAA04920B6615C1AA0A39D8B /* SettingsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SettingsManager.swift; path = TrapjawApp/Settings/SettingsManager.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -443,7 +443,7 @@ BAA04920B6615C1AA0A39D8B /* SettingsManager.swift */ = {isa = PBXFileReference; 
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/lib/iphoneos";
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = edu.mit.dot;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -479,7 +479,7 @@ BAA04920B6615C1AA0A39D8B /* SettingsManager.swift */ = {isa = PBXFileReference; 
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/lib/iphoneos";
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = edu.mit.dot;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
