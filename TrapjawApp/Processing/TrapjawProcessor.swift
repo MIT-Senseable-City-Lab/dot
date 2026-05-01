@@ -462,9 +462,27 @@ init(config: tj_config_t? = nil) {
             return nil
         }
         
-        // Convert to JPEG with maximum quality (no compression artifacts)
-        let uiImage = UIImage(cgImage: cgImage)
-        return uiImage.jpegData(compressionQuality: 1.0)
+        // Convert to JPEG using ImageIO (hardware-accelerated on modern devices)
+        return encodeJPEGWithImageIO(cgImage: cgImage)
+    }
+    
+    // ImageIO-based JPEG encoder - uses hardware JPEG encoder on A12+ (iPhone XR and later)
+    private func encodeJPEGWithImageIO(cgImage: CGImage) -> Data? {
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            data as CFMutableData,
+            "public.jpeg" as CFString,
+            1,
+            nil
+        ) else { return nil }
+        
+        let options: [CFString: Any] = [
+            kCGImageDestinationLossyCompressionQuality: 1.0
+        ]
+        CGImageDestinationAddImage(destination, cgImage, options as CFDictionary)
+        
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return data as Data
     }
     
     // MARK: - Track Upload
@@ -601,9 +619,9 @@ extension TrapjawProcessor: CameraManagerDelegate {
         let t1 = CFAbsoluteTimeGetCurrent()
         timing.record(stage: &timing.bufferStore, durationMs: (t1 - t0) * 1000)
         
-        // Async downscale 4K → 1080p
+        // Async downscale 4K → 1080p (nearest for ~2× faster GPU performance)
         let t2 = CFAbsoluteTimeGetCurrent()
-        downscaler?.downscale(inputBuffer: pixelBuffer4K, quality: .average) { [weak self] pixelBuffer1080p in
+        downscaler?.downscale(inputBuffer: pixelBuffer4K, quality: .nearest) { [weak self] pixelBuffer1080p in
             guard let self = self else { return }
             
             let t3 = CFAbsoluteTimeGetCurrent()
@@ -649,6 +667,11 @@ extension TrapjawProcessor: CameraManagerDelegate {
             
             // Log timing summary every 60 frames
             self.timing.logSummaryIfNeeded(frameIndex: currentIndex, bufferDepth: self.fourKBuffer?.currentCount ?? 0)
+            
+            // Flush Metal texture cache every 60 frames to prevent resource accumulation
+            if currentIndex % 60 == 0 {
+                self.downscaler?.flushTextureCache()
+            }
 
             if currentIndex % self.statsUpdateInterval == 0 {
                 self.updateStats(warmupCount: self.warmupFramesProcessed)
