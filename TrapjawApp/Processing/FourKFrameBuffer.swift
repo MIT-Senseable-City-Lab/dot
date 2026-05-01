@@ -34,7 +34,7 @@ final class FourKFrameBuffer {
     
     // MARK: - Init
     
-    init(maxFrames: Int = 10) {
+    init(maxFrames: Int = 5) {  // Reduced from 10 to 5 for memory efficiency (~165MB vs ~330MB)
         self.maxFrames = maxFrames
     }
     

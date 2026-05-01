@@ -109,8 +109,8 @@ init(config: tj_config_t? = nil) {
         
         self.config = cfg
         
-        // Initialize 4K frame buffer (10 frames ~330MB) - reduced for memory efficiency
-        self.fourKBuffer = FourKFrameBuffer(maxFrames: 10)
+        // Initialize 4K frame buffer (5 frames ~165MB) - reduced for memory efficiency
+        self.fourKBuffer = FourKFrameBuffer(maxFrames: 5)
         
         // Initialize Metal downscaler for 4K→1080p
         self.downscaler = MetalDownscaler(device: metalDevice)
