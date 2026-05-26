@@ -92,6 +92,13 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     // MARK: - JPEG Conversion Queue
     
     private let jpegQueue = DispatchQueue(label: "com.trapjaw.jpeg", qos: .utility, attributes: .concurrent)
+    
+    // MARK: - Luminance-Based Exposure Release
+    
+    private var luminanceHistory: [Float] = []
+    private let luminanceHistorySize = 150  // 5 seconds at 30fps
+    private let luminanceReleaseThreshold: Float = 0.50
+    private let luminanceLogInterval: UInt64 = 30
 
     // MARK: - Init
 
@@ -573,6 +580,82 @@ init(config: tj_config_t? = nil) {
             uploadTrack(track)
         }
     }
+
+    // MARK: - Luminance-Based Exposure Release
+
+    /// Fast CPU-based average luminance from a 1080p BGRA pixel buffer.
+    /// Samples every 16th pixel for negligible overhead (~8k samples/frame).
+    private func computeAverageLuminance(pixelBuffer: CVPixelBuffer) -> Float {
+        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+
+        guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else { return 0 }
+
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
+        let pixelStep = 16  // Sample every 16th pixel for speed
+
+        var totalLuminance: Float = 0
+        var sampleCount: Int = 0
+
+        let buffer = baseAddress.assumingMemoryBound(to: UInt8.self)
+
+        for y in stride(from: 0, to: height, by: pixelStep) {
+            let rowStart = y * bytesPerRow
+            for x in stride(from: 0, to: width, by: pixelStep) {
+                let pixelOffset = rowStart + (x * 4)
+                let b = Float(buffer[pixelOffset])
+                let g = Float(buffer[pixelOffset + 1])
+                let r = Float(buffer[pixelOffset + 2])
+                // BT.601 luma, normalized to 0.0-1.0
+                let luma = (0.114 * b + 0.587 * g + 0.299 * r) / 255.0
+                totalLuminance += luma
+                sampleCount += 1
+            }
+        }
+
+        guard sampleCount > 0 else { return 0 }
+        return totalLuminance / Float(sampleCount)
+    }
+
+    /// Compute median of a Float array.
+    private func median(of values: [Float]) -> Float {
+        guard !values.isEmpty else { return 0 }
+        let sorted = values.sorted()
+        let count = sorted.count
+        if count % 2 == 1 {
+            return sorted[count / 2]
+        } else {
+            return (sorted[count / 2 - 1] + sorted[count / 2]) / 2
+        }
+    }
+
+    /// Check sustained image luminance and request exposure release if overexposed.
+    private func checkLuminanceAndReleaseIfNeeded(pixelBuffer: CVPixelBuffer, frameIndex: UInt64) {
+        let luminance = computeAverageLuminance(pixelBuffer: pixelBuffer)
+        luminanceHistory.append(luminance)
+        if luminanceHistory.count > luminanceHistorySize {
+            luminanceHistory.removeFirst(luminanceHistory.count - luminanceHistorySize)
+        }
+
+        // Log every 30 frames
+        if frameIndex % luminanceLogInterval == 0 {
+            let medianLuma = median(of: luminanceHistory)
+            print("[EXPOSURE] Luminance: current=\(String(format: "%.3f", luminance)), median=\(String(format: "%.3f", medianLuma)), locked=\(cameraManager.isExposureLocked), samples=\(luminanceHistory.count)")
+        }
+
+        // Only check release if locked and we have a full 5-second window
+        guard cameraManager.isExposureLocked, luminanceHistory.count >= luminanceHistorySize else { return }
+
+        let medianLuma = median(of: luminanceHistory)
+        if medianLuma > luminanceReleaseThreshold {
+            print("[EXPOSURE] <<< RELEASED (luminance-based): median=\(String(format: "%.3f", medianLuma)) > \(luminanceReleaseThreshold)")
+            cameraManager.requestReleaseToAutoExposure()
+            // Clear history after release to avoid immediate re-trigger with stale values
+            luminanceHistory.removeAll()
+        }
+    }
 }
 
 // MARK: - CameraManagerDelegate
@@ -661,6 +744,9 @@ extension TrapjawProcessor: CameraManagerDelegate {
             } else if let r = result, r != TJ_OK {
                 procLog.error("Frame \(currentIndex): tj_process_frame returned \(r.rawValue)")
             }
+            
+            // Luminance-based exposure release check (uses actual image brightness, not corrupted AE offset)
+            self.checkLuminanceAndReleaseIfNeeded(pixelBuffer: pixelBuffer1080p, frameIndex: currentIndex)
             
             // End frame timing
             let _ = self.timing.endFrame()

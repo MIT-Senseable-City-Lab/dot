@@ -23,8 +23,6 @@ final class CameraManager: NSObject {
     private let outputQueue = DispatchQueue(label: "com.trapjaw.camera-output", qos: .userInitiated)
     private var isConfigured = false
 
-    private var cameraDevice: AVCaptureDevice?
-
     // MARK: - Active Device (gets device from running session, not stored reference)
     private var activeDevice: AVCaptureDevice? {
         guard let input = session.inputs.first as? AVCaptureDeviceInput else { return nil }
@@ -33,14 +31,17 @@ final class CameraManager: NSObject {
 
     // Exposure monitoring
     private let minExposureDuration = CMTime(value: 1, timescale: 1000)  // 1/1000s minimum
-    private let isoReleaseThreshold: Float = 50.0  // Release when ISO rises above this (scene is bright enough)
-    private let minLockDuration: TimeInterval = 1.0  // Minimum time to stay locked (1 second)
+    private let minLockDuration: TimeInterval = 5.0  // Minimum time to stay locked (5 seconds)
     private let exposureCheckInterval: TimeInterval = 0.1  // 100ms
-    private let exposureTransitionDebounce: TimeInterval = 1.0  // 1000ms (1 second) debounce
+    private let exposureTransitionDebounce: TimeInterval = 2.0  // 2000ms (2 second) debounce
+    private let isoLockThreshold: Float = 400.0  // Only lock when auto ISO is above this (dark scenes)
     private var exposureMonitorTimer: Timer?
     private var lastExposureModeChange: Date = Date.distantPast
-    private var isInMinExposureMode = false
+    private(set) var isInMinExposureMode = false
     private var exposureCheckCount: Int = 0
+    
+    /// Whether the exposure is currently locked to minimum duration (1/1000s).
+    var isExposureLocked: Bool { isInMinExposureMode }
 
     /// The preview layer for displaying the camera feed.
     var previewLayer: AVCaptureVideoPreviewLayer {
@@ -251,6 +252,8 @@ func start() {
         // If invalid (outside 20-2000), show debug info
         let isISOValid = currentISO >= 20 && currentISO <= 2000
 
+        let offset = device.exposureTargetOffset
+
         if shouldLogState {
             let minISO = device.activeFormat.minISO
             let maxISO = device.activeFormat.maxISO
@@ -258,22 +261,18 @@ func start() {
 
             if isISOValid {
                 isoDisplay = String(format: "%.1f", currentISO)
-                print("[EXPOSURE] State: 1/\(shutterSpeed)s, ISO \(isoDisplay) (range: \(Int(minISO))-\(Int(maxISO)))")
+                print("[EXPOSURE] State: 1/\(shutterSpeed)s, ISO \(isoDisplay), offset=\(String(format: "%+.2f", offset)) (range: \(Int(minISO))-\(Int(maxISO)))")
             } else {
                 // Show debug when ISO is outside expected range
                 isoDisplay = String(format: "%.2f", currentISO)
-                print("[EXPOSURE] State: 1/\(shutterSpeed)s, ISO=\(isoDisplay) (UNUSUAL - range: \(Int(minISO))-\(Int(maxISO)))")
+                print("[EXPOSURE] State: 1/\(shutterSpeed)s, ISO=\(isoDisplay), offset=\(String(format: "%+.2f", offset)) (UNUSUAL - range: \(Int(minISO))-\(Int(maxISO)))")
             }
         }
 
-        // Hysteresis: Lock when slower than min, release when ISO rises above threshold (scene is bright)
-        let shouldBeInMinMode = currentDurationSec > minDurationSec  // Lock when shutter > 1/1000s (slower)
-        
-        // ISO-based release: When locked, use ISO to detect if scene is bright enough
-        // Release when ISO rises above threshold AND minimum lock duration has passed
-        let timeSinceLock = now.timeIntervalSince(lastExposureModeChange)
-        let minLockDurationPassed = timeSinceLock >= minLockDuration
-        let shouldReleaseToAuto = (currentISO > isoReleaseThreshold) && minLockDurationPassed
+        // Hysteresis: Lock when auto shutter is slower than 1/1000s AND ISO is high enough.
+        // This prevents pointless locks in bright scenes where auto is already fine (ISO < 400).
+        // Release is handled externally (luminance-based) via requestReleaseToAutoExposure().
+        let shouldBeInMinMode = (currentDurationSec > minDurationSec) && (currentISO > isoLockThreshold)
 
         let isoStr = isISOValid ? String(format: "%.1f", currentISO) : String(format: "%.2f", currentISO)
 
@@ -281,31 +280,43 @@ func start() {
             lockToMinExposure(device: device)
             lastExposureModeChange = now
             isInMinExposureMode = true
-            print("[EXPOSURE] >>> LOCKED: shutter=1/\(shutterSpeed)s, ISO=\(isoStr), wait for ISO>\(Int(isoReleaseThreshold))")
-        } else if shouldReleaseToAuto && isInMinExposureMode {
-            // Release when scene is bright enough (ISO high) and minimum lock duration passed
-            releaseToAutoExposure(device: device)
-            lastExposureModeChange = now
-            isInMinExposureMode = false
-            print("[EXPOSURE] <<< RELEASED: ISO=\(isoStr) > \(Int(isoReleaseThreshold)), scene is bright")
+            print("[EXPOSURE] >>> LOCKED: shutter=1/\(shutterSpeed)s, ISO=\(isoStr), offset=\(String(format: "%+.2f", offset))")
         } else if isInMinExposureMode {
-            // Still locked - show why
+            // Still locked - show lock duration for diagnostics
             if shouldLogState {
-                let lockDurationMsg = minLockDurationPassed ? "duration OK" : "waiting \(Int(minLockDuration - timeSinceLock))s more"
-                print("[EXPOSURE] STAY LOCKED: ISO=\(isoStr), need ISO>\(Int(isoReleaseThreshold)) (\(lockDurationMsg))")
+                let timeSinceLock = now.timeIntervalSince(lastExposureModeChange)
+                let lockDurationMsg = timeSinceLock >= minLockDuration ? "duration OK" : "waiting \(Int(minLockDuration - timeSinceLock))s more"
+                print("[EXPOSURE] STAY LOCKED: offset=\(String(format: "%+.2f", offset)) (\(lockDurationMsg))")
             }
         }
     }
 
     private func lockToMinExposure(device: AVCaptureDevice) {
         guard device.isExposureModeSupported(.custom) else { return }
+
+        // Sample current auto exposure before changing mode
+        let currentDuration = device.exposureDuration
+        let currentISO = device.iso
+        let currentDurationSec = CMTimeGetSeconds(currentDuration)
+        let minDurationSec = CMTimeGetSeconds(minExposureDuration)
+
+        // Compute equivalent ISO for the same exposure at 1/1000s
+        // EV is preserved: ISO_new = ISO_auto * (duration_auto / duration_min)
+        let equivalentISO = currentISO * Float(currentDurationSec / minDurationSec)
+
+        // Clamp to valid device range
+        let minISO = device.activeFormat.minISO
+        let maxISO = device.activeFormat.maxISO
+        let clampedISO = max(minISO, min(maxISO, equivalentISO))
+
         do {
             try device.lockForConfiguration()
-            // Lock shutter to 1/1000s, but set ISO to max to allow auto-adjust
-            // This way: shutter is fixed at 1/1000s, ISO auto-adjusts (24-2304 range)
-            let maxISO = device.activeFormat.maxISO
-            device.setExposureModeCustom(duration: minExposureDuration, iso: maxISO, completionHandler: nil)
-            print("[EXPOSURE] Locked: shutter=1/1000s, ISO=auto (range: \(Int(device.activeFormat.minISO))-\(Int(maxISO)))")
+            device.setExposureModeCustom(
+                duration: minExposureDuration,
+                iso: clampedISO,
+                completionHandler: nil
+            )
+            print("[EXPOSURE] Locked: shutter=1/1000s, ISO=\(Int(clampedISO)) (equivalent from \(Int(currentISO))@1/\(Int(1.0 / currentDurationSec))s, range: \(Int(minISO))-\(Int(maxISO)))")
             device.unlockForConfiguration()
         } catch {
             print("[EXPOSURE] Failed to lock exposure: \(error.localizedDescription)")
@@ -320,6 +331,28 @@ func start() {
             device.unlockForConfiguration()
         } catch {
             print("[EXPOSURE] Failed to release exposure: \(error.localizedDescription)")
+        }
+    }
+
+    /// Request release from locked exposure back to auto-exposure.
+    /// Called externally (e.g. by TrapjawProcessor when sustained high luminance is detected).
+    /// Enforces minLockDuration guard internally.
+    func requestReleaseToAutoExposure() {
+        outputQueue.async { [weak self] in
+            guard let self = self else { return }
+            guard self.isInMinExposureMode else { return }
+
+            let timeSinceLock = Date().timeIntervalSince(self.lastExposureModeChange)
+            guard timeSinceLock >= self.minLockDuration else {
+                print("[EXPOSURE] Release request ignored: minimum lock duration not yet passed (\(Int(timeSinceLock))s / \(Int(self.minLockDuration))s)")
+                return
+            }
+
+            guard let device = self.activeDevice else { return }
+            self.releaseToAutoExposure(device: device)
+            self.lastExposureModeChange = Date()
+            self.isInMinExposureMode = false
+            print("[EXPOSURE] <<< RELEASED (luminance-based): releasing to auto after \(Int(timeSinceLock))s locked")
         }
     }
 }
