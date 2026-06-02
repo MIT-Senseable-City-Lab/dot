@@ -18,11 +18,27 @@ final class SettingsManager {
     private let serverIPKey = "SettingsManager_ServerIP"
     private let serverPortKey = "SettingsManager_ServerPort"
     private let useHTTPSKey = "SettingsManager_UseHTTPS"
+    private let backgroundCaptureEnabledKey = "SettingsManager_BackgroundCaptureEnabled"
+    private let backgroundCaptureSchedulesKey = "SettingsManager_BackgroundCaptureSchedules"
+    private let wifiSSIDKey = "SettingsManager_WifiSSID"
+    private let wifiPasswordKey = "SettingsManager_WifiPassword"
+    private let videoUploadEnabledKey = "SettingsManager_VideoUploadEnabled"
+    private let videoUploadSchedulesKey = "SettingsManager_VideoUploadSchedules"
+    
+    // MARK: - Defaults
+    static let defaultCaptureSchedules: [Int] = [725, 1205]
+    static let defaultVideoUploadSchedules: [Int] = [480, 840]
     
     // MARK: - State
     var serverIP: String
     var serverPort: Int
     var useHTTPS: Bool
+    var backgroundCaptureEnabled: Bool
+    var backgroundCaptureSchedules: [Int]
+    var videoUploadEnabled: Bool
+    var videoUploadSchedules: [Int]
+    var wifiSSID: String
+    var wifiPassword: String
     
     // MARK: - Connection Testing State
     var isTestingConnection = false
@@ -49,14 +65,25 @@ final class SettingsManager {
     // MARK: - Init
     
     private init() {
-        // Load from UserDefaults or use defaults
         let savedIP = UserDefaults.standard.string(forKey: serverIPKey)
         let savedPort = UserDefaults.standard.integer(forKey: serverPortKey)
         let savedUseHTTPS = UserDefaults.standard.bool(forKey: useHTTPSKey)
+        let savedBgEnabled = UserDefaults.standard.object(forKey: backgroundCaptureEnabledKey) as? Bool
+        let savedBgSchedules = UserDefaults.standard.object(forKey: backgroundCaptureSchedulesKey) as? [Int]
+        let savedVideoUploadEnabled = UserDefaults.standard.object(forKey: videoUploadEnabledKey) as? Bool
+        let savedVideoUploadSchedules = UserDefaults.standard.object(forKey: videoUploadSchedulesKey) as? [Int]
+        let savedWifiSSID = UserDefaults.standard.string(forKey: wifiSSIDKey)
+        let savedWifiPassword = UserDefaults.standard.string(forKey: wifiPasswordKey)
         
         self.serverIP = (savedIP?.isEmpty == false) ? savedIP! : "192.168.1.150"
         self.serverPort = (savedPort > 0) ? savedPort : 5001
         self.useHTTPS = savedUseHTTPS
+        self.backgroundCaptureEnabled = savedBgEnabled ?? true
+        self.backgroundCaptureSchedules = savedBgSchedules ?? Self.defaultCaptureSchedules
+        self.videoUploadEnabled = savedVideoUploadEnabled ?? true
+        self.videoUploadSchedules = savedVideoUploadSchedules ?? Self.defaultVideoUploadSchedules
+        self.wifiSSID = savedWifiSSID ?? ""
+        self.wifiPassword = savedWifiPassword ?? ""
     }
     
     // MARK: - Configuration
@@ -79,6 +106,74 @@ final class SettingsManager {
         self.useHTTPS = useHTTPS
         UserDefaults.standard.set(useHTTPS, forKey: useHTTPSKey)
         lastConnectionTestResult = nil
+    }
+    
+    func updateBackgroundCaptureEnabled(_ enabled: Bool) {
+        self.backgroundCaptureEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: backgroundCaptureEnabledKey)
+    }
+    
+    func addBackgroundCaptureSchedule(minuteOfDay: Int) {
+        let clamped = max(0, min(1439, minuteOfDay))
+        if !backgroundCaptureSchedules.contains(clamped) {
+            backgroundCaptureSchedules.append(clamped)
+            backgroundCaptureSchedules.sort()
+            UserDefaults.standard.set(backgroundCaptureSchedules, forKey: backgroundCaptureSchedulesKey)
+        }
+    }
+    
+    func removeBackgroundCaptureSchedule(minuteOfDay: Int) {
+        backgroundCaptureSchedules.removeAll { $0 == minuteOfDay }
+        UserDefaults.standard.set(backgroundCaptureSchedules, forKey: backgroundCaptureSchedulesKey)
+    }
+    
+    func updateWifiSSID(_ ssid: String) {
+        self.wifiSSID = ssid
+        UserDefaults.standard.set(ssid, forKey: wifiSSIDKey)
+    }
+    
+    func updateWifiPassword(_ password: String) {
+        self.wifiPassword = password
+        UserDefaults.standard.set(password, forKey: wifiPasswordKey)
+    }
+    
+    func updateVideoUploadEnabled(_ enabled: Bool) {
+        self.videoUploadEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: videoUploadEnabledKey)
+    }
+    
+    func addVideoUploadSchedule(minuteOfDay: Int) {
+        let clamped = max(0, min(1439, minuteOfDay))
+        if !videoUploadSchedules.contains(clamped) {
+            videoUploadSchedules.append(clamped)
+            videoUploadSchedules.sort()
+            UserDefaults.standard.set(videoUploadSchedules, forKey: videoUploadSchedulesKey)
+        }
+    }
+    
+    func removeVideoUploadSchedule(minuteOfDay: Int) {
+        videoUploadSchedules.removeAll { $0 == minuteOfDay }
+        UserDefaults.standard.set(videoUploadSchedules, forKey: videoUploadSchedulesKey)
+    }
+    
+    /// Format a minute-of-day value as "h:mm AM/PM"
+    static func formatSchedule(_ minuteOfDay: Int) -> String {
+        let hours = minuteOfDay / 60
+        let minutes = minuteOfDay % 60
+        if hours == 0 { return String(format: "12:%02d AM", minutes) }
+        if hours < 12 { return String(format: "%d:%02d AM", hours, minutes) }
+        if hours == 12 { return String(format: "12:%02d PM", minutes) }
+        return String(format: "%d:%02d PM", hours - 12, minutes)
+    }
+    
+    /// Convert hour and minute to minute-of-day
+    static func toMinuteOfDay(hour: Int, minute: Int) -> Int {
+        return hour * 60 + minute
+    }
+    
+    /// Convert minute-of-day to hour and minute
+    static func fromMinuteOfDay(_ minuteOfDay: Int) -> (hour: Int, minute: Int) {
+        return (minuteOfDay / 60, minuteOfDay % 60)
     }
     
     // MARK: - Validation
@@ -179,10 +274,22 @@ final class SettingsManager {
         serverIP = "192.168.1.150"
         serverPort = 5001
         useHTTPS = false
+        backgroundCaptureEnabled = true
+        backgroundCaptureSchedules = Self.defaultCaptureSchedules
+        videoUploadEnabled = true
+        videoUploadSchedules = Self.defaultVideoUploadSchedules
+        wifiSSID = ""
+        wifiPassword = ""
         
         UserDefaults.standard.set(serverIP, forKey: serverIPKey)
         UserDefaults.standard.set(serverPort, forKey: serverPortKey)
         UserDefaults.standard.set(useHTTPS, forKey: useHTTPSKey)
+        UserDefaults.standard.set(backgroundCaptureEnabled, forKey: backgroundCaptureEnabledKey)
+        UserDefaults.standard.set(backgroundCaptureSchedules, forKey: backgroundCaptureSchedulesKey)
+        UserDefaults.standard.set(videoUploadEnabled, forKey: videoUploadEnabledKey)
+        UserDefaults.standard.set(videoUploadSchedules, forKey: videoUploadSchedulesKey)
+        UserDefaults.standard.set(wifiSSID, forKey: wifiSSIDKey)
+        UserDefaults.standard.set(wifiPassword, forKey: wifiPasswordKey)
         
         lastConnectionTestResult = nil
     }

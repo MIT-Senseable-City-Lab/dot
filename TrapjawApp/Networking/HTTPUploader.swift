@@ -55,7 +55,7 @@ final class HTTPUploader {
             return
         }
         
-        let url = "\(config.getServerURL())/upload_track"
+        let url = "\(config.getServerURL())/upload_crops"
         
         guard let serverURL = URL(string: url) else {
             logger.error("Invalid server URL")
@@ -165,5 +165,246 @@ final class HTTPUploader {
     
     func resetErrorCount() {
         uploadErrors = 0
+    }
+    
+    func uploadDone(trackId: String) {
+        let url = "\(config.getServerURL())/upload_done"
+        
+        guard let requestURL = URL(string: url) else {
+            logger.error("Invalid server URL for done marker")
+            return
+        }
+        
+        var request = URLRequest(url: requestURL)
+        request.httpMethod = "POST"
+        request.setValue(config.deviceId, forHTTPHeaderField: "X-Device-ID")
+        request.setValue(config.deviceName, forHTTPHeaderField: "X-Device-Name")
+        request.setValue(trackId, forHTTPHeaderField: "X-Track-ID")
+        
+        URLSession.shared.dataTask(with: request).resume()
+    }
+    
+    func uploadBackground(
+        imageData: Data,
+        retryCount: Int = 0,
+        isRetry: Bool = false,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        let url = "\(config.getServerURL())/upload_background"
+        
+        guard let serverURL = URL(string: url) else {
+            logger.error("Invalid server URL for background upload")
+            completion?(false)
+            return
+        }
+        
+        if !isRetry {
+            pendingUploads += 1
+            NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
+        }
+        
+        logger.info("Uploading background image (\(imageData.count / 1024) KB)...")
+        
+        var request = URLRequest(url: serverURL)
+        request.httpMethod = "POST"
+        
+        let boundary = UUID().uuidString
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.setValue(config.deviceId, forHTTPHeaderField: "X-Device-ID")
+        request.setValue(config.deviceName, forHTTPHeaderField: "X-Device-Name")
+        
+        var body = Data()
+        
+        // Add image file
+        let timestampFormatter = DateFormatter()
+        timestampFormatter.dateFormat = "HHmmss"
+        let filename = "\(timestampFormatter.string(from: Date()))_background.jpg"
+        
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"image\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+        body.append(imageData)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        
+        let task = URLSession.shared.uploadTask(with: request, from: body) { [weak self] data, response, error in
+            guard let self else { return }
+            
+            if let error = error {
+                logger.error("Background upload failed (attempt \(retryCount + 1)): \(error.localizedDescription)")
+                
+                if retryCount < self.maxRetries {
+                    let delay = self.baseDelay * pow(2.0, Double(retryCount))
+                    logger.info("Retrying background upload in \(delay)s...")
+                    
+                    DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
+                        self.uploadBackground(imageData: imageData, retryCount: retryCount + 1, isRetry: true, completion: completion)
+                    }
+                    return
+                }
+                
+                self.pendingUploads -= 1
+                self.uploadErrors += 1
+                NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
+                NotificationCenter.default.post(name: .uploadErrorOccurred, object: nil)
+                completion?(false)
+                return
+            }
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                logger.error("Invalid response type for background upload")
+                
+                if retryCount < self.maxRetries {
+                    let delay = self.baseDelay * pow(2.0, Double(retryCount))
+                    DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
+                        self.uploadBackground(imageData: imageData, retryCount: retryCount + 1, isRetry: true, completion: completion)
+                    }
+                    return
+                }
+                
+                self.pendingUploads -= 1
+                self.uploadErrors += 1
+                NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
+                NotificationCenter.default.post(name: .uploadErrorOccurred, object: nil)
+                completion?(false)
+                return
+            }
+            
+            if httpResponse.statusCode == 200 {
+                logger.info("Background image uploaded successfully")
+                self.pendingUploads -= 1
+                NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
+                completion?(true)
+            } else {
+                logger.error("Background upload failed with status \(httpResponse.statusCode)")
+                
+                if retryCount < self.maxRetries {
+                    let delay = self.baseDelay * pow(2.0, Double(retryCount))
+                    DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
+                        self.uploadBackground(imageData: imageData, retryCount: retryCount + 1, isRetry: true, completion: completion)
+                    }
+                    return
+                }
+                
+                self.pendingUploads -= 1
+                self.uploadErrors += 1
+                NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
+                NotificationCenter.default.post(name: .uploadErrorOccurred, object: nil)
+                completion?(false)
+            }
+        }
+        task.resume()
+    }
+    
+    func uploadVideo(
+        videoData: Data,
+        filename: String,
+        timestamp: String,
+        retryCount: Int = 0,
+        isRetry: Bool = false,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        let url = "\(config.getServerURL())/upload_video"
+        
+        guard let serverURL = URL(string: url) else {
+            logger.error("Invalid server URL for video upload")
+            completion?(false)
+            return
+        }
+        
+        if !isRetry {
+            pendingUploads += 1
+            NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
+        }
+        
+        let sizeMB = Double(videoData.count) / (1024.0 * 1024.0)
+        logger.info("Uploading video \(filename) (\(String(format: "%.1f", sizeMB)) MB)...")
+        
+        var request = URLRequest(url: serverURL)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 120.0
+        
+        let boundary = UUID().uuidString
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.setValue(config.deviceId, forHTTPHeaderField: "X-Device-ID")
+        request.setValue(config.deviceName, forHTTPHeaderField: "X-Device-Name")
+        request.setValue(timestamp, forHTTPHeaderField: "X-Video-Timestamp")
+        
+        var body = Data()
+        
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"video\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: video/mp4\r\n\r\n".data(using: .utf8)!)
+        body.append(videoData)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        
+        let task = URLSession.shared.uploadTask(with: request, from: body) { [weak self] data, response, error in
+            guard let self else { return }
+            
+            if let error = error {
+                logger.error("Video upload failed (attempt \(retryCount + 1)): \(error.localizedDescription)")
+                
+                if retryCount < self.maxRetries {
+                    let delay = self.baseDelay * pow(2.0, Double(retryCount))
+                    logger.info("Retrying video upload in \(delay)s...")
+                    
+                    DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
+                        self.uploadVideo(videoData: videoData, filename: filename, timestamp: timestamp, retryCount: retryCount + 1, isRetry: true, completion: completion)
+                    }
+                    return
+                }
+                
+                self.pendingUploads -= 1
+                self.uploadErrors += 1
+                NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
+                NotificationCenter.default.post(name: .uploadErrorOccurred, object: nil)
+                completion?(false)
+                return
+            }
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                logger.error("Invalid response type for video upload")
+                
+                if retryCount < self.maxRetries {
+                    let delay = self.baseDelay * pow(2.0, Double(retryCount))
+                    DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
+                        self.uploadVideo(videoData: videoData, filename: filename, timestamp: timestamp, retryCount: retryCount + 1, isRetry: true, completion: completion)
+                    }
+                    return
+                }
+                
+                self.pendingUploads -= 1
+                self.uploadErrors += 1
+                NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
+                NotificationCenter.default.post(name: .uploadErrorOccurred, object: nil)
+                completion?(false)
+                return
+            }
+            
+            if httpResponse.statusCode == 200 {
+                logger.info("Video uploaded successfully: \(filename)")
+                self.pendingUploads -= 1
+                NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
+                completion?(true)
+            } else {
+                logger.error("Video upload failed with status \(httpResponse.statusCode)")
+                
+                if retryCount < self.maxRetries {
+                    let delay = self.baseDelay * pow(2.0, Double(retryCount))
+                    DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
+                        self.uploadVideo(videoData: videoData, filename: filename, timestamp: timestamp, retryCount: retryCount + 1, isRetry: true, completion: completion)
+                    }
+                    return
+                }
+                
+                self.pendingUploads -= 1
+                self.uploadErrors += 1
+                NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
+                NotificationCenter.default.post(name: .uploadErrorOccurred, object: nil)
+                completion?(false)
+            }
+        }
+        task.resume()
     }
 }

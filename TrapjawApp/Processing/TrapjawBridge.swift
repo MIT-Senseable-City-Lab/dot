@@ -9,6 +9,9 @@
 import Foundation
 import Metal
 import CoreVideo
+import os.log
+
+private let bridgeLog = Logger(subsystem: "com.trapjaw.bridge", category: "TrapjawBridge")
 
 /// Data extracted from a trapjaw crop callback, safe to hold beyond the callback lifetime.
 struct CropData {
@@ -43,10 +46,18 @@ final class TrapjawBridge {
         var cfg = config
         let metalPtr = device.map { Unmanaged.passUnretained($0).toOpaque() }
 
+        bridgeLog.info("TrapjawBridge init: frame=\(cfg.frame_width)x\(cfg.frame_height), fps=\(cfg.fps), bg_model=\(cfg.bg_model.rawValue), gmm_components=\(cfg.gmm_num_components), warmup=\(cfg.bg_warmup_frames), metal_device=\(device != nil ? "yes" : "no")")
+
         guard let ctx = tj_create(&cfg, metalPtr) else {
+            bridgeLog.error("TrapjawBridge init: tj_create returned NULL")
             throw TrapjawError.initFailed
         }
         self.context = ctx
+        bridgeLog.info("TrapjawBridge init: tj_create succeeded, context=\(String(describing: ctx))")
+
+        let hasGPU = metalPtr != nil
+        let stats = tj_get_stats(ctx)
+        bridgeLog.info("TrapjawBridge init: initial stats frames_processed=\(stats.frames_processed), total_crops=\(stats.total_crops_emitted)")
 
         // Set up crop callback with self as user_data
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
@@ -66,7 +77,6 @@ final class TrapjawBridge {
 
     deinit {
         if let ctx = context {
-            tj_flush(ctx)
             tj_destroy(ctx)
         }
         context = nil
@@ -84,6 +94,9 @@ final class TrapjawBridge {
     ///   - frameIndex: Monotonic frame counter.
     ///   - timestamp: Presentation timestamp in seconds.
     /// - Returns: The trapjaw result code.
+    private var debugFrameCount: UInt64 = 0
+    private var cropCount: UInt64 = 0
+
     @discardableResult
     func processFrame(
         pixelBuffer: CVPixelBuffer,
@@ -100,6 +113,10 @@ final class TrapjawBridge {
         let height = UInt32(CVPixelBufferGetHeight(pixelBuffer))
         let bytesPerRow = UInt32(CVPixelBufferGetBytesPerRow(pixelBuffer))
 
+        if frameIndex == 0 {
+            bridgeLog.info("processFrame: first frame \(width)x\(height), bpr=\(bytesPerRow), ptr=\(String(describing: baseAddress))")
+        }
+
         var frame = tj_frame_t()
         frame.pixels = UnsafeRawPointer(baseAddress)
         frame.pixel_buffer = nil
@@ -111,13 +128,25 @@ final class TrapjawBridge {
         frame.frame_index = frameIndex
         frame.timestamp_sec = timestamp
 
-        return tj_process_frame(ctx, &frame)
+        let result = tj_process_frame(ctx, &frame)
+
+        if frameIndex < 5 {
+            bridgeLog.info("processFrame: frame=\(frameIndex) result=\(result.rawValue) (TJ_OK=0, NOT_READY=9)")
+        }
+
+        if result == TJ_OK && frameIndex % 300 == 0 && frameIndex > 0 {
+            let stats = tj_get_stats(ctx)
+            bridgeLog.info("processFrame periodic: frame=\(frameIndex) frames_processed=\(stats.frames_processed) tracks_created=\(stats.total_tracks_created) tracks_stitched=\(stats.total_tracks_stitched) crops=\(stats.total_crops_emitted) avg_ms=\(stats.avg_pipeline_time_ms)")
+        }
+
+        return result
     }
 
-    /// Flush the async GPU pipeline. Must be called after the last frame.
+    /// Flush pending operations and destroy context.
     func flush() {
         guard let ctx = context else { return }
-        tj_flush(ctx)
+        context = nil
+        tj_destroy(ctx)
     }
 
     // MARK: - Queries
@@ -160,6 +189,12 @@ final class TrapjawBridge {
     // MARK: - Callback Handlers
 
     private func handleCrop(_ crop: tj_crop_t) {
+        let myCount = cropCount
+        cropCount += 1
+        if myCount < 3 {
+            bridgeLog.info("handleCrop #\(myCount): track_id=\(crop.track_id) bbox=\(crop.bbox.x),\(crop.bbox.y) \(crop.bbox.w)x\(crop.bbox.h) frame=\(crop.frame_index)")
+        }
+
         let byteCount = Int(crop.bytes_per_row) * Int(crop.height)
         let pixelData = Data(bytes: crop.pixels, count: byteCount)
 
@@ -182,6 +217,11 @@ final class TrapjawBridge {
     }
 
     private func handleDebugFrame(_ frame: tj_debug_frame_t) {
+        let myCount = debugFrameCount
+        debugFrameCount += 1
+        if myCount < 5 || myCount % 300 == 0 {
+            bridgeLog.info("handleDebugFrame #\(myCount): pipeline_ms=\(String(format: "%.2f", frame.pipeline_time_ms)) tracks=\(frame.active_track_count) blobs=\(frame.blob_count) frame=\(frame.frame_index)")
+        }
         onDebugFrame?(frame.pipeline_time_ms, frame.active_track_count, frame.frame_index)
     }
 }

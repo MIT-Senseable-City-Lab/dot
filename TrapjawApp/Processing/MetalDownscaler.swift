@@ -278,4 +278,11 @@ final class MetalDownscaler {
         
         return CVMetalTextureGetTexture(cvTexture)
     }
+    
+    /// Flush the Metal texture cache to prevent resource accumulation.
+    /// Call periodically (e.g., every 60 frames) to avoid GPU memory pressure.
+    func flushTextureCache() {
+        guard let cache = textureCache else { return }
+        CVMetalTextureCacheFlush(cache, 0)
+    }
 }

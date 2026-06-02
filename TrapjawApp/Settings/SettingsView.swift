@@ -3,7 +3,7 @@
 //  TrapjawApp
 //
 //  Settings view for configuring server connection.
-//  Allows users to set server IP, port, and test connectivity.
+//  Allows users to set server IP, port, background capture times, and test connectivity.
 //
 
 import SwiftUI
@@ -15,6 +15,10 @@ struct SettingsView: View {
     @State private var ipInput = ""
     @State private var portInput = ""
     @State private var useHTTPSToggle = false
+    @State private var bgCaptureEnabled = true
+    @State private var videoUploadEnabled = true
+    @State private var wifiSSIDInput = ""
+    @State private var wifiPasswordInput = ""
     @State private var showValidationError = false
     @State private var validationMessage = ""
     
@@ -54,6 +58,56 @@ struct SettingsView: View {
                 
                 Section(header: Text("Connection Status")) {
                     ConnectionStatusView()
+                }
+                
+                Section(header: Text("WiFi"), footer: Text("WiFi credentials for the Pi's network, stored locally for reference.")) {
+                    HStack {
+                        Text("Network Name")
+                        Spacer()
+                        TextField("WiFi SSID", text: $wifiSSIDInput)
+                            .multilineTextAlignment(.trailing)
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
+                    }
+                    
+                    HStack {
+                        Text("Password")
+                        Spacer()
+                        SecureField("Password", text: $wifiPasswordInput)
+                            .multilineTextAlignment(.trailing)
+                    }
+                }
+                
+                Section(header: Text("Background Capture"), footer: Text("Reference photos sent to the Pi at scheduled times. Must be within operating hours (5AM\u{2013}10PM).")) {
+                    Toggle("Enabled", isOn: $bgCaptureEnabled)
+                    
+                    if bgCaptureEnabled {
+                        NavigationLink(destination: CaptureScheduleView()) {
+                            HStack {
+                                Text("Capture Times")
+                                Spacer()
+                                Text(captureSchedulesSummary)
+                                    .foregroundColor(.secondary)
+                                    .font(.subheadline)
+                            }
+                        }
+                    }
+                }
+                
+                Section(header: Text("Video Upload"), footer: Text("Upload 1-minute 4K video clips to the Pi at scheduled times. Must be within operating hours (5AM\u{2013}10PM).")) {
+                    Toggle("Enabled", isOn: $videoUploadEnabled)
+                    
+                    if videoUploadEnabled {
+                        NavigationLink(destination: VideoUploadScheduleView()) {
+                            HStack {
+                                Text("Upload Times")
+                                Spacer()
+                                Text(videoUploadSchedulesSummary)
+                                    .foregroundColor(.secondary)
+                                    .font(.subheadline)
+                            }
+                        }
+                    }
                 }
                 
                 Section {
@@ -96,7 +150,7 @@ struct SettingsView: View {
                     }
                 }
             }
-            .navigationTitle("Server Settings")
+            .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -114,6 +168,10 @@ struct SettingsView: View {
                 ipInput = settings.serverIP
                 portInput = String(settings.serverPort)
                 useHTTPSToggle = settings.useHTTPS
+                bgCaptureEnabled = settings.backgroundCaptureEnabled
+                videoUploadEnabled = settings.videoUploadEnabled
+                wifiSSIDInput = settings.wifiSSID
+                wifiPasswordInput = settings.wifiPassword
             }
         }
     }
@@ -124,10 +182,21 @@ struct SettingsView: View {
         (Int(portInput) ?? 0) <= 65535
     }
     
+    private var captureSchedulesSummary: String {
+        let schedules = settings.backgroundCaptureSchedules.sorted()
+        if schedules.isEmpty { return "None" }
+        return schedules.map { SettingsManager.formatSchedule($0) }.joined(separator: ", ")
+    }
+    
+    private var videoUploadSchedulesSummary: String {
+        let schedules = settings.videoUploadSchedules.sorted()
+        if schedules.isEmpty { return "None" }
+        return schedules.map { SettingsManager.formatSchedule($0) }.joined(separator: ", ")
+    }
+    
     private func testConnection() {
         guard validateInput() else { return }
         
-        // Update settings temporarily for test
         settings.updateServerIP(ipInput)
         settings.updateServerPort(Int(portInput) ?? 5001)
         settings.updateUseHTTPS(useHTTPSToggle)
@@ -143,6 +212,10 @@ struct SettingsView: View {
         settings.updateServerIP(ipInput)
         settings.updateServerPort(Int(portInput) ?? 5001)
         settings.updateUseHTTPS(useHTTPSToggle)
+        settings.updateBackgroundCaptureEnabled(bgCaptureEnabled)
+        settings.updateVideoUploadEnabled(videoUploadEnabled)
+        settings.updateWifiSSID(wifiSSIDInput)
+        settings.updateWifiPassword(wifiPasswordInput)
         
         dismiss()
     }
@@ -152,6 +225,10 @@ struct SettingsView: View {
         ipInput = settings.serverIP
         portInput = String(settings.serverPort)
         useHTTPSToggle = settings.useHTTPS
+        bgCaptureEnabled = settings.backgroundCaptureEnabled
+        videoUploadEnabled = settings.videoUploadEnabled
+        wifiSSIDInput = settings.wifiSSID
+        wifiPasswordInput = settings.wifiPassword
     }
     
     private func validateInput() -> Bool {
@@ -179,12 +256,189 @@ struct SettingsView: View {
     }
 }
 
+// MARK: - Capture Schedule View
+
+struct CaptureScheduleView: View {
+    @Bindable var settings = SettingsManager.shared
+    @State private var selectedHour = 12
+    @State private var selectedMinute = 0
+    
+    private let hours = Array(5...22)  // 5AM to 10PM (operating hours)
+    private let minutes = stride(from: 0, to: 60, by: 5)  // 0, 5, 10, ..., 55
+    
+    var body: some View {
+        List {
+            // Add new schedule
+            Section(header: Text("Add Capture Time")) {
+                HStack {
+                    Picker("Hour", selection: $selectedHour) {
+                        ForEach(hours, id: \.self) { hour in
+                            Text(hourLabel(hour)).tag(hour)
+                        }
+                    }
+                    .pickerStyle(.wheel)
+                    
+                    Text(":")
+                    
+                    Picker("Minute", selection: $selectedMinute) {
+                        ForEach(Array(minutes), id: \.self) { minute in
+                            Text(String(format: "%02d", minute)).tag(minute)
+                        }
+                    }
+                    .pickerStyle(.wheel)
+                    .frame(width: 80)
+                }
+                
+                Button(action: addSchedule) {
+                    HStack {
+                        Image(systemName: "plus.circle.fill")
+                        Text("Add Time")
+                    }
+                }
+                .disabled(isAlreadyAdded)
+            }
+            
+            // Current schedules
+            Section(header: Text("Scheduled Captures")) {
+                if settings.backgroundCaptureSchedules.isEmpty {
+                    Text("No capture times set")
+                        .foregroundColor(.secondary)
+                } else {
+                    ForEach(settings.backgroundCaptureSchedules.sorted(), id: \.self) { schedule in
+                        HStack {
+                            Image(systemName: "calendar")
+                                .foregroundColor(.blue)
+                            Text(SettingsManager.formatSchedule(schedule))
+                            Spacer()
+                            Button(action: { removeSchedule(schedule) }) {
+                                Image(systemName: "trash")
+                                    .foregroundColor(.red)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("Capture Times")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+    
+    private var isAlreadyAdded: Bool {
+        let minuteOfDay = SettingsManager.toMinuteOfDay(hour: selectedHour, minute: selectedMinute)
+        return settings.backgroundCaptureSchedules.contains(minuteOfDay)
+    }
+    
+    private func hourLabel(_ hour: Int) -> String {
+        if hour == 0 { return "12 AM" }
+        if hour < 12 { return "\(hour) AM" }
+        if hour == 12 { return "12 PM" }
+        return "\(hour - 12) PM"
+    }
+    
+    private func addSchedule() {
+        let minuteOfDay = SettingsManager.toMinuteOfDay(hour: selectedHour, minute: selectedMinute)
+        settings.addBackgroundCaptureSchedule(minuteOfDay: minuteOfDay)
+    }
+    
+    private func removeSchedule(_ minuteOfDay: Int) {
+        settings.removeBackgroundCaptureSchedule(minuteOfDay: minuteOfDay)
+    }
+}
+
+// MARK: - Video Upload Schedule View
+
+struct VideoUploadScheduleView: View {
+    @Bindable var settings = SettingsManager.shared
+    @State private var selectedHour = 8
+    @State private var selectedMinute = 0
+    
+    private let hours = Array(5...22)  // 5AM to 10PM (operating hours)
+    private let minutes = stride(from: 0, to: 60, by: 5)  // 0, 5, 10, ..., 55
+    
+    var body: some View {
+        List {
+            Section(header: Text("Add Upload Time")) {
+                HStack {
+                    Picker("Hour", selection: $selectedHour) {
+                        ForEach(hours, id: \.self) { hour in
+                            Text(hourLabel(hour)).tag(hour)
+                        }
+                    }
+                    .pickerStyle(.wheel)
+                    
+                    Text(":")
+                    
+                    Picker("Minute", selection: $selectedMinute) {
+                        ForEach(Array(minutes), id: \.self) { minute in
+                            Text(String(format: "%02d", minute)).tag(minute)
+                        }
+                    }
+                    .pickerStyle(.wheel)
+                    .frame(width: 80)
+                }
+                
+                Button(action: addSchedule) {
+                    HStack {
+                        Image(systemName: "plus.circle.fill")
+                        Text("Add Time")
+                    }
+                }
+                .disabled(isAlreadyAdded)
+            }
+            
+            Section(header: Text("Scheduled Uploads")) {
+                if settings.videoUploadSchedules.isEmpty {
+                    Text("No upload times set")
+                        .foregroundColor(.secondary)
+                } else {
+                    ForEach(settings.videoUploadSchedules.sorted(), id: \.self) { schedule in
+                        HStack {
+                            Image(systemName: "video")
+                                .foregroundColor(.purple)
+                            Text(SettingsManager.formatSchedule(schedule))
+                            Spacer()
+                            Button(action: { removeSchedule(schedule) }) {
+                                Image(systemName: "trash")
+                                    .foregroundColor(.red)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("Video Upload Times")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+    
+    private var isAlreadyAdded: Bool {
+        let minuteOfDay = SettingsManager.toMinuteOfDay(hour: selectedHour, minute: selectedMinute)
+        return settings.videoUploadSchedules.contains(minuteOfDay)
+    }
+    
+    private func hourLabel(_ hour: Int) -> String {
+        if hour == 0 { return "12 AM" }
+        if hour < 12 { return "\(hour) AM" }
+        if hour == 12 { return "12 PM" }
+        return "\(hour - 12) PM"
+    }
+    
+    private func addSchedule() {
+        let minuteOfDay = SettingsManager.toMinuteOfDay(hour: selectedHour, minute: selectedMinute)
+        settings.addVideoUploadSchedule(minuteOfDay: minuteOfDay)
+    }
+    
+    private func removeSchedule(_ minuteOfDay: Int) {
+        settings.removeVideoUploadSchedule(minuteOfDay: minuteOfDay)
+    }
+}
+
+// MARK: - Connection Status View
+
 struct ConnectionStatusView: View {
     @Bindable var settings = SettingsManager.shared
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Current URL display
             HStack {
                 Text("Current URL:")
                     .font(.caption)
@@ -201,7 +455,6 @@ struct ConnectionStatusView: View {
             
             Divider()
             
-            // Connection test result
             if let result = settings.lastConnectionTestResult {
                 HStack {
                     connectionStatusIcon(for: result)

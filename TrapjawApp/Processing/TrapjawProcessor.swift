@@ -13,6 +13,9 @@ import Metal
 import CoreVideo
 import UIKit
 import CoreImage
+import os.log
+
+private let procLog = Logger(subsystem: "com.trapjaw.processor", category: "TrapjawProcessor")
 
 // Shared CIContext for efficient crop extraction (preserves color accuracy)
 private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
@@ -66,6 +69,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     private var frameIndex: UInt64 = 0
     private var warmupFramesProcessed: UInt64 = 0  // Counts frames during warmup
     private var lastProcessedFrame: UInt64 = 0     // For detecting out-of-order processing
+    private var lastTerminationTrackCount: Int = 0
     private var startTime: CFAbsoluteTime = 0
     private let config: tj_config_t
     private let statsUpdateInterval: UInt64 = 30
@@ -77,6 +81,8 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     private let httpUploader = HTTPUploader.shared
     private let trackBuffer = TrackBuffer.shared
     private let networkConfig = NetworkConfig.shared
+    private(set) var backgroundCaptureManager: BackgroundCaptureManager?
+    private(set) var videoClipManager: VideoClipManager?
     
     // MARK: - Timing & Diagnostics
     
@@ -86,22 +92,32 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     // MARK: - JPEG Conversion Queue
     
     private let jpegQueue = DispatchQueue(label: "com.trapjaw.jpeg", qos: .utility, attributes: .concurrent)
+    
+    // MARK: - Luminance-Based Exposure Release
+    
+    private var luminanceHistory: [Float] = []
+    private let luminanceHistorySize = 150  // 5 seconds at 30fps
+    private let luminanceReleaseThreshold: Float = 0.50
+    private let luminanceLogInterval: UInt64 = 30
 
     // MARK: - Init
 
-    init(config: tj_config_t? = nil) {
+init(config: tj_config_t? = nil) {
         self.metalDevice = MTLCreateSystemDefaultDevice()
 
+        // Use C's defaults entirely - avoid Swift/C struct ABI issues
+        // The C defaults are already tuned for this use case
         var cfg = config ?? tj_config_defaults()
-        cfg.frame_width = 1920
-        cfg.frame_height = 1080
-        cfg.fps = 30.0
-        cfg.camera_fov_degrees = 67.0
+        
+        // Enable debug callback for UI metrics (GPU ms, active tracks)
         cfg.debug_enabled = true
+        
+        procLog.info("Config initialized with C defaults, debug_enabled=true")
+        
         self.config = cfg
         
-        // Initialize 4K frame buffer (10 frames ~330MB) - reduced for memory efficiency
-        self.fourKBuffer = FourKFrameBuffer(maxFrames: 10)
+        // Initialize 4K frame buffer (5 frames ~165MB) - reduced for memory efficiency
+        self.fourKBuffer = FourKFrameBuffer(maxFrames: 5)
         
         // Initialize Metal downscaler for 4K→1080p
         self.downscaler = MetalDownscaler(device: metalDevice)
@@ -219,6 +235,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
         do {
             let bridge = try TrapjawBridge(config: config, device: metalDevice)
             self.bridge = bridge
+            procLog.info("TrapjawBridge created successfully")
 
             bridge.onCrop = { [weak self] crop in
                 self?.handleCrop(crop)
@@ -243,10 +260,23 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
 
             cameraManager.start()
             dataStreamer.start()
+            
+            // Start background capture manager (2x daily reference images)
+            if let buffer = fourKBuffer {
+                backgroundCaptureManager = BackgroundCaptureManager(fourKBuffer: buffer)
+                backgroundCaptureManager?.start()
+            }
+            
+            // Start video clip manager (scheduled 1-min MP4 uploads)
+            videoClipManager = VideoClipManager()
+            cameraManager.videoClipManager = videoClipManager
+            videoClipManager?.start()
+            
             isRunning = true
             state = .warmingUp
 
         } catch {
+            procLog.error("TrapjawBridge init FAILED: \(error.localizedDescription)")
             self.error = error
             state = .failed
         }
@@ -257,6 +287,8 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     func stop() {
         guard isRunning else { return }
 
+        backgroundCaptureManager?.stop()
+        videoClipManager?.stop()
         state = .stopping
         dataStreamer.stop()
         cameraManager.stop()
@@ -275,6 +307,8 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     func pause() {
         guard isRunning && !isStarting else { return }
         
+        backgroundCaptureManager?.stop()
+        videoClipManager?.stop()
         state = .stopping
         
         // Stop camera first to stop new frames
@@ -307,8 +341,8 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
         
         let activeIds = bridge.getActiveTrackIds()
         let resolution = StreamResolution(
-            width: Int(config.frame_width),
-            height: Int(config.frame_height)
+            width: Int(CameraManager.captureWidth),
+            height: Int(CameraManager.captureHeight)
         )
         
         let finalizedTracks = trackBuffer.finalizeTerminatedTracks(
@@ -330,6 +364,8 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     
     private func handleCrop(_ crop: CropData) {
         guard let bridge else { return }
+        
+        procLog.info("handleCrop: track=\(crop.trackID) bbox=\(Int(crop.bbox.origin.x)),\(Int(crop.bbox.origin.y)) \(Int(crop.bbox.width))x\(Int(crop.bbox.height)) frame=\(crop.frameIndex)")
         
         let stitchedId = bridge.getStitchedId(rawTrackId: crop.trackID)
         trackBuffer.setStitchedId(rawTrackId: crop.trackID, stitchedId: stitchedId)
@@ -394,7 +430,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
             
             if let trackToUpload = self.trackBuffer.addCrop(
                 trackId: trackId,
-                bbox: bbox1080p,  // Keep 1080p bbox for telemetry consistency
+                bbox: bbox4K,  // Store 4K bbox for correct composite placement
                 frameIndex: frameIndex,
                 timestamp: timestamp,
                 jpegData: jpegData,
@@ -433,19 +469,42 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
             return nil
         }
         
-        // Convert to JPEG with maximum quality (no compression artifacts)
-        let uiImage = UIImage(cgImage: cgImage)
-        return uiImage.jpegData(compressionQuality: 1.0)
+        // Convert to JPEG using ImageIO (hardware-accelerated on modern devices)
+        return encodeJPEGWithImageIO(cgImage: cgImage)
+    }
+    
+    // ImageIO-based JPEG encoder - uses hardware JPEG encoder on A12+ (iPhone XR and later)
+    private func encodeJPEGWithImageIO(cgImage: CGImage) -> Data? {
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            data as CFMutableData,
+            "public.jpeg" as CFString,
+            1,
+            nil
+        ) else { return nil }
+        
+        let options: [CFString: Any] = [
+            kCGImageDestinationLossyCompressionQuality: 1.0
+        ]
+        CGImageDestinationAddImage(destination, cgImage, options as CFDictionary)
+        
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return data as Data
     }
     
     // MARK: - Track Upload
     
     private func uploadTrack(_ track: FinalizedTrack) {
-        let trackIdString = String(track.stitchedId)
+        let hexId = String(format: "%08x", track.stitchedId)
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "HHmmss"
+        let timeStr = dateFormatter.string(from: Date())
+        let trackIdString = "\(hexId)_\(timeStr)"
         
+        let firstFrameIndex = track.startIndex
         let points = track.crops.map { crop -> TrackNode in
             TrackNode(
-                timestamp: Date(timeIntervalSince1970: crop.timestamp),
+                timestamp: Date().addingTimeInterval(Double(crop.frameIndex - UInt64(firstFrameIndex)) / 30.0),
                 x: crop.bbox.origin.x,
                 y: crop.bbox.origin.y,
                 width: crop.bbox.size.width,
@@ -467,16 +526,23 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
         
         let jpegDataArray = track.crops.map { $0.jpegData }
         httpUploader.uploadCrops(trackId: trackIdString, crops: jpegDataArray, startIndex: track.startIndex)
+        
+        // Signal track completion so receiver can create done.txt
+        httpUploader.uploadDone(trackId: trackIdString)
     }
 
     private func updateStats(warmupCount: UInt64) {
         guard let bridge else { return }
         let stats = bridge.getStats()
         
-        print("[STATS] warmupCount=\(warmupCount), threshold=\(config.bg_warmup_frames), state=\(state.rawValue)")
+        if warmupCount <= 5 || warmupCount % 300 == 0 {
+            let warmupFrames = config.bg_warmup_frames
+            procLog.info("updateStats: warmup=\(warmupCount)/\(warmupFrames) frames=\(stats.frames_processed) tracks=\(stats.total_tracks_created) crops=\(stats.total_crops_emitted) avg_ms=\(String(format: "%.2f", stats.avg_pipeline_time_ms))")
+        }
 
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
+            guard let self = self else { return }
+            let warmupFrames = self.config.bg_warmup_frames
             self.metrics.updateFromStats(stats)
             
             self.metrics.updateWarmupStatus(
@@ -485,7 +551,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
             )
 
             if warmupCount >= UInt64(self.config.bg_warmup_frames) && self.state == .warmingUp {
-                print("[STATE] Transitioning: \(self.state.rawValue) → processing")
+                procLog.info("STATE: Transitioning warmingUp → processing (warmup=\(warmupCount))")
                 self.state = .processing
             }
         }
@@ -495,9 +561,14 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
         guard let bridge else { return }
         
         let activeIds = bridge.getActiveTrackIds()
+        
+        if !activeIds.isEmpty && activeIds.count != lastTerminationTrackCount {
+            procLog.info("checkTerminatedTracks: activeIds count=\(activeIds.count)")
+            lastTerminationTrackCount = activeIds.count
+        }
         let resolution = StreamResolution(
-            width: Int(config.frame_width),
-            height: Int(config.frame_height)
+            width: Int(CameraManager.captureWidth),
+            height: Int(CameraManager.captureHeight)
         )
         
         let finalizedTracks = trackBuffer.finalizeTerminatedTracks(
@@ -507,6 +578,82 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
         
         for track in finalizedTracks {
             uploadTrack(track)
+        }
+    }
+
+    // MARK: - Luminance-Based Exposure Release
+
+    /// Fast CPU-based average luminance from a 1080p BGRA pixel buffer.
+    /// Samples every 16th pixel for negligible overhead (~8k samples/frame).
+    private func computeAverageLuminance(pixelBuffer: CVPixelBuffer) -> Float {
+        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+
+        guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else { return 0 }
+
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
+        let pixelStep = 16  // Sample every 16th pixel for speed
+
+        var totalLuminance: Float = 0
+        var sampleCount: Int = 0
+
+        let buffer = baseAddress.assumingMemoryBound(to: UInt8.self)
+
+        for y in stride(from: 0, to: height, by: pixelStep) {
+            let rowStart = y * bytesPerRow
+            for x in stride(from: 0, to: width, by: pixelStep) {
+                let pixelOffset = rowStart + (x * 4)
+                let b = Float(buffer[pixelOffset])
+                let g = Float(buffer[pixelOffset + 1])
+                let r = Float(buffer[pixelOffset + 2])
+                // BT.601 luma, normalized to 0.0-1.0
+                let luma = (0.114 * b + 0.587 * g + 0.299 * r) / 255.0
+                totalLuminance += luma
+                sampleCount += 1
+            }
+        }
+
+        guard sampleCount > 0 else { return 0 }
+        return totalLuminance / Float(sampleCount)
+    }
+
+    /// Compute median of a Float array.
+    private func median(of values: [Float]) -> Float {
+        guard !values.isEmpty else { return 0 }
+        let sorted = values.sorted()
+        let count = sorted.count
+        if count % 2 == 1 {
+            return sorted[count / 2]
+        } else {
+            return (sorted[count / 2 - 1] + sorted[count / 2]) / 2
+        }
+    }
+
+    /// Check sustained image luminance and request exposure release if overexposed.
+    private func checkLuminanceAndReleaseIfNeeded(pixelBuffer: CVPixelBuffer, frameIndex: UInt64) {
+        let luminance = computeAverageLuminance(pixelBuffer: pixelBuffer)
+        luminanceHistory.append(luminance)
+        if luminanceHistory.count > luminanceHistorySize {
+            luminanceHistory.removeFirst(luminanceHistory.count - luminanceHistorySize)
+        }
+
+        // Log every 30 frames
+        if frameIndex % luminanceLogInterval == 0 {
+            let medianLuma = median(of: luminanceHistory)
+            print("[EXPOSURE] Luminance: current=\(String(format: "%.3f", luminance)), median=\(String(format: "%.3f", medianLuma)), locked=\(cameraManager.isExposureLocked), samples=\(luminanceHistory.count)")
+        }
+
+        // Only check release if locked and we have a full 5-second window
+        guard cameraManager.isExposureLocked, luminanceHistory.count >= luminanceHistorySize else { return }
+
+        let medianLuma = median(of: luminanceHistory)
+        if medianLuma > luminanceReleaseThreshold {
+            print("[EXPOSURE] <<< RELEASED (luminance-based): median=\(String(format: "%.3f", medianLuma)) > \(luminanceReleaseThreshold)")
+            cameraManager.requestReleaseToAutoExposure()
+            // Clear history after release to avoid immediate re-trigger with stale values
+            luminanceHistory.removeAll()
         }
     }
 }
@@ -540,6 +687,10 @@ extension TrapjawProcessor: CameraManagerDelegate {
         // Increment warmup frame counter (for warmup detection)
         warmupFramesProcessed += 1
         
+        if currentIndex == 0 {
+            procLog.info("First frame received: 4K=\(CVPixelBufferGetWidth(pixelBuffer4K))x\(CVPixelBufferGetHeight(pixelBuffer4K))")
+        }
+        
         // Debug logging every 30 frames
         if currentIndex % 30 == 0 {
             print("[FRAME] idx=\(currentIndex), warmupCount=\(warmupFramesProcessed), state=\(state.rawValue)")
@@ -551,9 +702,9 @@ extension TrapjawProcessor: CameraManagerDelegate {
         let t1 = CFAbsoluteTimeGetCurrent()
         timing.record(stage: &timing.bufferStore, durationMs: (t1 - t0) * 1000)
         
-        // Async downscale 4K → 1080p
+        // Async downscale 4K → 1080p (nearest for ~2× faster GPU performance)
         let t2 = CFAbsoluteTimeGetCurrent()
-        downscaler?.downscale(inputBuffer: pixelBuffer4K, quality: .average) { [weak self] pixelBuffer1080p in
+        downscaler?.downscale(inputBuffer: pixelBuffer4K, quality: .nearest) { [weak self] pixelBuffer1080p in
             guard let self = self else { return }
             
             let t3 = CFAbsoluteTimeGetCurrent()
@@ -587,13 +738,26 @@ extension TrapjawProcessor: CameraManagerDelegate {
                 DispatchQueue.main.async { [weak self] in
                     self?.metrics.recordProcessedFrame()
                 }
+                if result == TJ_ERROR_NOT_READY && self.warmupFramesProcessed < 5 {
+                    procLog.info("Frame \(currentIndex): TJ_ERROR_NOT_READY (warmup)")
+                }
+            } else if let r = result, r != TJ_OK {
+                procLog.error("Frame \(currentIndex): tj_process_frame returned \(r.rawValue)")
             }
+            
+            // Luminance-based exposure release check (uses actual image brightness, not corrupted AE offset)
+            self.checkLuminanceAndReleaseIfNeeded(pixelBuffer: pixelBuffer1080p, frameIndex: currentIndex)
             
             // End frame timing
             let _ = self.timing.endFrame()
             
             // Log timing summary every 60 frames
             self.timing.logSummaryIfNeeded(frameIndex: currentIndex, bufferDepth: self.fourKBuffer?.currentCount ?? 0)
+            
+            // Flush Metal texture cache every 60 frames to prevent resource accumulation
+            if currentIndex % 60 == 0 {
+                self.downscaler?.flushTextureCache()
+            }
 
             if currentIndex % self.statsUpdateInterval == 0 {
                 self.updateStats(warmupCount: self.warmupFramesProcessed)
