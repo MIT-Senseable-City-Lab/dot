@@ -116,8 +116,8 @@ init(config: tj_config_t? = nil) {
         
         self.config = cfg
         
-        // Initialize 4K frame buffer (5 frames ~165MB) - reduced for memory efficiency
-        self.fourKBuffer = FourKFrameBuffer(maxFrames: 5)
+        // Initialize 4K frame buffer (10 frames ~330MB)
+        self.fourKBuffer = FourKFrameBuffer(maxFrames: 10)
         
         // Initialize Metal downscaler for 4K→1080p
         self.downscaler = MetalDownscaler(device: metalDevice)
@@ -194,7 +194,7 @@ init(config: tj_config_t? = nil) {
     }
     
     @objc private func handleMemoryWarning() {
-        // Reduce 4K buffer from 10 to 5 frames on memory warning
+        // Reduce 4K buffer to 5 frames on memory warning
         fourKBuffer?.reduceCapacity(to: 5)
     }
     
@@ -391,23 +391,22 @@ init(config: tj_config_t? = nil) {
             print("[CROP-DIAG] Requesting frame \(frameIndex), buffer depth: \(bufferDepth), drops: missing=\(cropsDroppedMissingFrame), failed=\(cropsDroppedExtractionFailed)")
         }
         
-        jpegQueue.async { [weak self] in
+        // Look up buffer synchronously BEFORE dispatching to jpegQueue
+        // so the pixel buffer is retained and can't be evicted while queued.
+        guard let pixelBuffer4K = self.fourKBuffer?.get(frameIndex: frameIndex) else {
+            self.cropsDroppedMissingFrame += 1
+            if totalCropsReceived % 20 == 1 {
+                print("[CROP-DIAG] ❌ Frame \(frameIndex) NOT FOUND in buffer (dropped)")
+            }
+            return
+        }
+        
+        if totalCropsReceived % 20 == 1 {
+            print("[CROP-DIAG] ✅ Frame \(frameIndex) retrieved successfully")
+        }
+        
+        jpegQueue.async { [weak self, pixelBuffer4K] in
             guard let self else { return }
-            
-            // Get 4K frame from buffer - drop crop if frame not available
-            guard let pixelBuffer4K = self.fourKBuffer?.get(frameIndex: frameIndex) else {
-                // Frame was evicted from buffer, drop this crop
-                self.cropsDroppedMissingFrame += 1
-                if self.totalCropsReceived % 20 == 1 {
-                    print("[CROP-DIAG] ❌ Frame \(frameIndex) NOT FOUND in buffer (dropped)")
-                }
-                return
-            }
-            
-            // Verify we got the right frame
-            if self.totalCropsReceived % 20 == 1 {
-                print("[CROP-DIAG] ✅ Frame \(frameIndex) retrieved successfully")
-            }
             
             // Extract crop from 4K frame and convert to JPEG (CoreImage preserves color accuracy)
             guard let jpegData = self.extractCropFrom4K(

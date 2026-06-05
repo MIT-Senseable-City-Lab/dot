@@ -23,7 +23,7 @@
 		A10001C3 /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10001BB /* CoreMedia.framework */; };
 		A10001C4 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10001BC /* Foundation.framework */; };
 		A10001C5 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10001BD /* QuartzCore.framework */; };
-		A10001C6 /* libtrapjaw.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A10001BE /* libtrapjaw.a */; };
+		A10001C6 /* trapjaw.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10001BE /* trapjaw.xcframework */; };
 		A10001C7 /* trapjaw.metallib in Resources */ = {isa = PBXBuildFile; fileRef = A10001BF /* trapjaw.metallib */; };
 		A10001D5 /* TrackNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001D8 /* TrackNode.swift */; };
 		A10001D6 /* StreamResolution.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001D9 /* StreamResolution.swift */; };
@@ -62,7 +62,7 @@
 		A10001BB /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = System/Library/Frameworks/CoreMedia.framework; sourceTree = SDKROOT; };
 		A10001BC /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		A10001BD /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
-		A10001BE /* libtrapjaw.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libtrapjaw.a; path = lib/iphoneos/libtrapjaw.a; sourceTree = SOURCE_ROOT; };
+		A10001BE /* trapjaw.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = trapjaw.xcframework; path = lib/trapjaw.xcframework; sourceTree = SOURCE_ROOT; };
 		A10001BF /* trapjaw.metallib */ = {isa = PBXFileReference; lastKnownFileType = "archive.metal-library"; name = trapjaw.metallib; path = lib/trapjaw.metallib; sourceTree = SOURCE_ROOT; };
 		A10001D8 /* TrackNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackNode.swift; sourceTree = "<group>"; };
 		A10001D9 /* StreamResolution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamResolution.swift; sourceTree = "<group>"; };
@@ -92,7 +92,7 @@
 				A10001C3 /* CoreMedia.framework in Frameworks */,
 				A10001C4 /* Foundation.framework in Frameworks */,
 				A10001C5 /* QuartzCore.framework in Frameworks */,
-				A10001C6 /* libtrapjaw.a in Frameworks */,
+				A10001C6 /* trapjaw.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -199,7 +199,7 @@
 				A10001BB /* CoreMedia.framework */,
 				A10001BC /* Foundation.framework */,
 				A10001BD /* QuartzCore.framework */,
-				A10001BE /* libtrapjaw.a */,
+				A10001BE /* trapjaw.xcframework */,
 				A10001BF /* trapjaw.metallib */,
 			);
 			name = Frameworks;

@@ -34,7 +34,7 @@ final class FourKFrameBuffer {
     
     // MARK: - Init
     
-    init(maxFrames: Int = 5) {  // Reduced from 10 to 5 for memory efficiency (~165MB vs ~330MB)
+    init(maxFrames: Int = 10) {  // 10 frames ~330MB, good balance for crop extraction runway
         self.maxFrames = maxFrames
     }
     
