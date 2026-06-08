@@ -535,21 +535,21 @@ init(config: tj_config_t? = nil) {
         let stats = bridge.getStats()
         
         if warmupCount <= 5 || warmupCount % 300 == 0 {
-            let warmupFrames = config.bg_warmup_frames
+            let warmupFrames = config.gmm_history
             procLog.info("updateStats: warmup=\(warmupCount)/\(warmupFrames) frames=\(stats.frames_processed) tracks=\(stats.total_tracks_created) crops=\(stats.total_crops_emitted) avg_ms=\(String(format: "%.2f", stats.avg_pipeline_time_ms))")
         }
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            let warmupFrames = self.config.bg_warmup_frames
+            let warmupFrames = self.config.gmm_history
             self.metrics.updateFromStats(stats)
             
             self.metrics.updateWarmupStatus(
                 framesProcessed: warmupCount,
-                warmupFrames: self.config.bg_warmup_frames
+                warmupFrames: self.config.gmm_history
             )
 
-            if warmupCount >= UInt64(self.config.bg_warmup_frames) && self.state == .warmingUp {
+            if warmupCount >= UInt64(self.config.gmm_history) && self.state == .warmingUp {
                 procLog.info("STATE: Transitioning warmingUp → processing (warmup=\(warmupCount))")
                 self.state = .processing
             }
@@ -701,9 +701,9 @@ extension TrapjawProcessor: CameraManagerDelegate {
         let t1 = CFAbsoluteTimeGetCurrent()
         timing.record(stage: &timing.bufferStore, durationMs: (t1 - t0) * 1000)
         
-        // Async downscale 4K → 1080p (nearest for ~2× faster GPU performance)
+        // Async downscale 4K → 1080p (average for better small-object preservation)
         let t2 = CFAbsoluteTimeGetCurrent()
-        downscaler?.downscale(inputBuffer: pixelBuffer4K, quality: .nearest) { [weak self] pixelBuffer1080p in
+        downscaler?.downscale(inputBuffer: pixelBuffer4K, quality: .average) { [weak self] pixelBuffer1080p in
             guard let self = self else { return }
             
             let t3 = CFAbsoluteTimeGetCurrent()

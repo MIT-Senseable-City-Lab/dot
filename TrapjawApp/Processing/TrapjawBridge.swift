@@ -46,7 +46,7 @@ final class TrapjawBridge {
         var cfg = config
         let metalPtr = device.map { Unmanaged.passUnretained($0).toOpaque() }
 
-        bridgeLog.info("TrapjawBridge init: frame=\(cfg.frame_width)x\(cfg.frame_height), fps=\(cfg.fps), bg_model=\(cfg.bg_model.rawValue), gmm_components=\(cfg.gmm_num_components), warmup=\(cfg.bg_warmup_frames), metal_device=\(device != nil ? "yes" : "no")")
+        bridgeLog.info("TrapjawBridge init: frame=\(cfg.frame_width)x\(cfg.frame_height), fps=\(cfg.fps), gmm_components=\(cfg.gmm_num_components), history=\(cfg.gmm_history), metal_device=\(device != nil ? "yes" : "no")")
 
         guard let ctx = tj_create(&cfg, metalPtr) else {
             bridgeLog.error("TrapjawBridge init: tj_create returned NULL")
