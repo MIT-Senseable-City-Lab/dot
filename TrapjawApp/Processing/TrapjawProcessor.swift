@@ -112,7 +112,11 @@ init(config: tj_config_t? = nil) {
         // Enable debug callback for UI metrics (GPU ms, active tracks)
         cfg.debug_enabled = true
         
-        procLog.info("Config initialized with C defaults, debug_enabled=true")
+        // iOS re-extracts crops from 4K buffer using bbox+frame_index, so
+        // pixel data in the callback is pure overhead. Disable it for efficiency.
+        cfg.crop_callback_pixels = false
+        
+        procLog.info("Config initialized with C defaults, debug_enabled=true, crop_callback_pixels=false")
         
         self.config = cfg
         

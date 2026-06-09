@@ -196,7 +196,12 @@ final class TrapjawBridge {
         }
 
         let byteCount = Int(crop.bytes_per_row) * Int(crop.height)
-        let pixelData = Data(bytes: crop.pixels, count: byteCount)
+        let pixelData: Data
+        if let pixels = crop.pixels, byteCount > 0 {
+            pixelData = Data(bytes: pixels, count: byteCount)
+        } else {
+            pixelData = Data()
+        }
 
         let cropData = CropData(
             trackID: crop.track_id,
