@@ -270,8 +270,8 @@ init(config: tj_config_t? = nil) {
                 guard let self else { return }
                 procLog.info("Track terminated callback: id=\(trackId) confirmed=\(confirmed) crops=\(numCrops)")
                 self.terminatingTracks.insert(trackId)
-                // Immediately check for terminated tracks to upload final batch
-                self.checkTerminatedTracks()
+                // Do NOT trigger checkTerminatedTracks here — crops may still be arriving.
+                // The 60-frame poll will catch the termination after all crops are buffered.
             }
 
             try await cameraManager.configure()
@@ -517,11 +517,7 @@ init(config: tj_config_t? = nil) {
     // MARK: - Track Upload
 
     private func uploadTrack(_ track: FinalizedTrack, isFinalUpload: Bool = false) {
-        let hexId = String(format: "%08x", track.stitchedId)
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "HHmmss"
-        let timeStr = dateFormatter.string(from: Date())
-        let trackIdString = "\(hexId)_\(timeStr)"
+        let trackIdString = track.trackIdString
 
         let firstFrameIndex = track.startIndex
         let points = track.crops.map { crop -> TrackNode in
