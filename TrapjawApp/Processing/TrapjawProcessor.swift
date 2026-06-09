@@ -245,17 +245,23 @@ init(config: tj_config_t? = nil) {
                 self?.handleCrop(crop)
             }
 
-            bridge.onDebugFrame = { [weak self] (pipelineMs, activeTracks, frameIdx) in
+            bridge.onDebugFrame = { [weak self] (pipelineMs, activeTracks, frameIdx, status) in
                 guard let self else { return }
                 // Debug logging every 30 frames
                 if frameIdx % 30 == 0 {
-                    print("[DEBUG_FRAME] idx=\(frameIdx), activeTracks=\(activeTracks), pipelineMs=\(pipelineMs)")
+                    print("[DEBUG_FRAME] idx=\(frameIdx), activeTracks=\(activeTracks), pipelineMs=\(pipelineMs), status=\(status)")
                 }
                 DispatchQueue.main.async {
                     // Update combined GPU time: downscale + trapjaw pipeline
                     let downscaleMs = self.timing.downscale.lastMs
                     self.metrics.updateGpuTime(downscaleMs: downscaleMs, trapjawPipelineMs: pipelineMs)
                     self.metrics.updateActiveTrackCount(activeTracks)
+                    // Update state from trapjaw's authoritative status (reuses .paused for motion pause)
+                    if status == "PAUSED" && self.state != .paused {
+                        self.state = .paused
+                    } else if status == "ACTIVE" && self.state == .paused {
+                        self.state = .processing
+                    }
                 }
             }
 
@@ -737,12 +743,15 @@ extension TrapjawProcessor: CameraManagerDelegate {
             let t5 = CFAbsoluteTimeGetCurrent()
             self.timing.record(stage: &self.timing.trapjawProcess, durationMs: (t5 - t4) * 1000)
             
-            if result == TJ_OK || result == TJ_ERROR_NOT_READY {
+            if result == TJ_OK || result == TJ_ERROR_NOT_READY || result == TJ_ERROR_MOTION_PAUSE {
                 DispatchQueue.main.async { [weak self] in
                     self?.metrics.recordProcessedFrame()
                 }
                 if result == TJ_ERROR_NOT_READY && self.warmupFramesProcessed < 5 {
                     procLog.info("Frame \(currentIndex): TJ_ERROR_NOT_READY (warmup)")
+                }
+                if result == TJ_ERROR_MOTION_PAUSE && currentIndex % 30 == 0 {
+                    procLog.info("Frame \(currentIndex): TJ_ERROR_MOTION_PAUSE (global motion detected)")
                 }
             } else if let r = result, r != TJ_OK {
                 procLog.error("Frame \(currentIndex): tj_process_frame returned \(r.rawValue)")

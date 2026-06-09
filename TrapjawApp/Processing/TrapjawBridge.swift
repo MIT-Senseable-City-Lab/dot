@@ -33,7 +33,7 @@ final class TrapjawBridge {
     var onCrop: ((CropData) -> Void)?
 
     /// Callback invoked on the processing thread with per-frame pipeline timing.
-    var onDebugFrame: ((Double, UInt32, UInt64) -> Void)?  // (pipelineMs, activeTracks, frameIndex)
+    var onDebugFrame: ((Double, UInt32, UInt64, String) -> Void)?  // (pipelineMs, activeTracks, frameIndex, status)
 
     // MARK: - Lifecycle
 
@@ -224,10 +224,11 @@ final class TrapjawBridge {
     private func handleDebugFrame(_ frame: tj_debug_frame_t) {
         let myCount = debugFrameCount
         debugFrameCount += 1
+        let status = frame.status_text.map { String(cString: $0) } ?? "UNKNOWN"
         if myCount < 5 || myCount % 300 == 0 {
-            bridgeLog.info("handleDebugFrame #\(myCount): pipeline_ms=\(String(format: "%.2f", frame.pipeline_time_ms)) tracks=\(frame.active_track_count) blobs=\(frame.blob_count) frame=\(frame.frame_index)")
+            bridgeLog.info("handleDebugFrame #\(myCount): pipeline_ms=\(String(format: "%.2f", frame.pipeline_time_ms)) tracks=\(frame.active_track_count) blobs=\(frame.blob_count) frame=\(frame.frame_index) status=\(status)")
         }
-        onDebugFrame?(frame.pipeline_time_ms, frame.active_track_count, frame.frame_index)
+        onDebugFrame?(frame.pipeline_time_ms, frame.active_track_count, frame.frame_index, status)
     }
 }
 
