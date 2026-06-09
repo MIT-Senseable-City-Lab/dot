@@ -71,6 +71,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     private var lastProcessedFrame: UInt64 = 0     // For detecting out-of-order processing
     private var lastTerminationTrackCount: Int = 0
     private var terminatingTracks: Set<UInt32> = []
+    private let terminatingTracksLock = OSAllocatedUnfairLock<Void>()
     private var startTime: CFAbsoluteTime = 0
     private let config: tj_config_t
     private let statsUpdateInterval: UInt64 = 30
@@ -269,7 +270,9 @@ init(config: tj_config_t? = nil) {
             bridge.onTrackTerminated = { [weak self] (trackId, confirmed, numCrops, metrics) in
                 guard let self else { return }
                 procLog.info("Track terminated callback: id=\(trackId) confirmed=\(confirmed) crops=\(numCrops)")
-                self.terminatingTracks.insert(trackId)
+                self.terminatingTracksLock.withLock {
+                    self.terminatingTracks.insert(trackId)
+                }
                 // Do NOT trigger checkTerminatedTracks here — crops may still be arriving.
                 // The 60-frame poll will catch the termination after all crops are buffered.
             }
@@ -370,11 +373,11 @@ init(config: tj_config_t? = nil) {
         )
 
         for track in finalizedTracks {
-            // When flushing on pause/stop, we don't know if tracks are truly dead,
-            // so treat as non-final uploads unless they were in terminatingTracks
-            let isFinal = terminatingTracks.contains(track.trackId)
-            uploadTrack(track, isFinalUpload: isFinal)
-            terminatingTracks.remove(track.trackId)
+            // On pause/stop all flushed tracks are effectively final — app is shutting down
+            uploadTrack(track, isFinalUpload: true)
+            terminatingTracksLock.withLock {
+                terminatingTracks.remove(track.trackId)
+            }
         }
     }
 
@@ -543,12 +546,16 @@ init(config: tj_config_t? = nil) {
         dataStreamer.sendTrackTelemetry(payload)
 
         let jpegDataArray = track.crops.map { $0.jpegData }
-        httpUploader.uploadCrops(trackId: trackIdString, crops: jpegDataArray, startIndex: track.startIndex)
+        httpUploader.uploadCrops(trackId: trackIdString, crops: jpegDataArray, startIndex: track.startIndex) { [weak self] success in
+            guard let self else { return }
+            if success && isFinalUpload {
+                self.httpUploader.uploadDone(trackId: trackIdString)
+                procLog.info("uploadTrack FINAL done: \(trackIdString)")
+            }
+        }
 
-        // Only signal track completion on the final batch
         if isFinalUpload {
-            httpUploader.uploadDone(trackId: trackIdString)
-            procLog.info("uploadTrack FINAL: \(trackIdString) (\(track.crops.count) crops)")
+            procLog.info("uploadTrack FINAL started: \(trackIdString) (\(track.crops.count) crops)")
         } else {
             procLog.info("uploadTrack BATCH: \(trackIdString) (\(track.crops.count) crops, start=\(track.startIndex))")
         }
@@ -600,10 +607,13 @@ init(config: tj_config_t? = nil) {
         )
 
         for track in finalizedTracks {
-            // Final upload only if C explicitly told us this track terminated
-            let isFinal = terminatingTracks.contains(track.trackId)
+            let isFinal = terminatingTracksLock.withLock {
+                terminatingTracks.contains(track.trackId)
+            }
             uploadTrack(track, isFinalUpload: isFinal)
-            terminatingTracks.remove(track.trackId)
+            terminatingTracksLock.withLock {
+                terminatingTracks.remove(track.trackId)
+            }
         }
     }
 
