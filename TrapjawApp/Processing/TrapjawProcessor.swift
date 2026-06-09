@@ -70,6 +70,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     private var warmupFramesProcessed: UInt64 = 0  // Counts frames during warmup
     private var lastProcessedFrame: UInt64 = 0     // For detecting out-of-order processing
     private var lastTerminationTrackCount: Int = 0
+    private var terminatingTracks: Set<UInt32> = []
     private var startTime: CFAbsoluteTime = 0
     private let config: tj_config_t
     private let statsUpdateInterval: UInt64 = 30
@@ -265,6 +266,14 @@ init(config: tj_config_t? = nil) {
                 }
             }
 
+            bridge.onTrackTerminated = { [weak self] (trackId, confirmed, numCrops, metrics) in
+                guard let self else { return }
+                procLog.info("Track terminated callback: id=\(trackId) confirmed=\(confirmed) crops=\(numCrops)")
+                self.terminatingTracks.insert(trackId)
+                // Immediately check for terminated tracks to upload final batch
+                self.checkTerminatedTracks()
+            }
+
             try await cameraManager.configure()
             cameraManager.delegate = self
 
@@ -348,20 +357,24 @@ init(config: tj_config_t? = nil) {
     
     private func flushRemainingTracks() {
         guard let bridge else { return }
-        
-        let activeIds = bridge.getActiveTrackIds()
+
+        let allIds = bridge.getAllTrackIds()
         let resolution = StreamResolution(
             width: Int(CameraManager.captureWidth),
             height: Int(CameraManager.captureHeight)
         )
-        
+
         let finalizedTracks = trackBuffer.finalizeTerminatedTracks(
-            activeTrackIds: activeIds,
+            activeTrackIds: allIds,
             resolution: resolution
         )
-        
+
         for track in finalizedTracks {
-            uploadTrack(track)
+            // When flushing on pause/stop, we don't know if tracks are truly dead,
+            // so treat as non-final uploads unless they were in terminatingTracks
+            let isFinal = terminatingTracks.contains(track.trackId)
+            uploadTrack(track, isFinalUpload: isFinal)
+            terminatingTracks.remove(track.trackId)
         }
     }
 
@@ -502,14 +515,14 @@ init(config: tj_config_t? = nil) {
     }
     
     // MARK: - Track Upload
-    
-    private func uploadTrack(_ track: FinalizedTrack) {
+
+    private func uploadTrack(_ track: FinalizedTrack, isFinalUpload: Bool = false) {
         let hexId = String(format: "%08x", track.stitchedId)
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "HHmmss"
         let timeStr = dateFormatter.string(from: Date())
         let trackIdString = "\(hexId)_\(timeStr)"
-        
+
         let firstFrameIndex = track.startIndex
         let points = track.crops.map { crop -> TrackNode in
             TrackNode(
@@ -521,23 +534,28 @@ init(config: tj_config_t? = nil) {
                 frameIndex: Int(crop.frameIndex)
             )
         }
-        
+
         let payload = InsectTelemetryPayload(
             trackId: trackIdString,
-            status: "completed",
+            status: isFinalUpload ? "completed" : "active",
             resolution: track.resolution,
             points: points,
             deviceId: networkConfig.deviceId,
             deviceName: networkConfig.deviceName
         )
-        
+
         dataStreamer.sendTrackTelemetry(payload)
-        
+
         let jpegDataArray = track.crops.map { $0.jpegData }
         httpUploader.uploadCrops(trackId: trackIdString, crops: jpegDataArray, startIndex: track.startIndex)
-        
-        // Signal track completion so receiver can create done.txt
-        httpUploader.uploadDone(trackId: trackIdString)
+
+        // Only signal track completion on the final batch
+        if isFinalUpload {
+            httpUploader.uploadDone(trackId: trackIdString)
+            procLog.info("uploadTrack FINAL: \(trackIdString) (\(track.crops.count) crops)")
+        } else {
+            procLog.info("uploadTrack BATCH: \(trackIdString) (\(track.crops.count) crops, start=\(track.startIndex))")
+        }
     }
 
     private func updateStats(warmupCount: UInt64) {
@@ -568,25 +586,28 @@ init(config: tj_config_t? = nil) {
     
     private func checkTerminatedTracks() {
         guard let bridge else { return }
-        
-        let activeIds = bridge.getActiveTrackIds()
-        
-        if !activeIds.isEmpty && activeIds.count != lastTerminationTrackCount {
-            procLog.info("checkTerminatedTracks: activeIds count=\(activeIds.count)")
-            lastTerminationTrackCount = activeIds.count
+
+        let allIds = bridge.getAllTrackIds()
+
+        if !allIds.isEmpty && allIds.count != lastTerminationTrackCount {
+            procLog.info("checkTerminatedTracks: allTrackIds count=\(allIds.count)")
+            lastTerminationTrackCount = allIds.count
         }
         let resolution = StreamResolution(
             width: Int(CameraManager.captureWidth),
             height: Int(CameraManager.captureHeight)
         )
-        
+
         let finalizedTracks = trackBuffer.finalizeTerminatedTracks(
-            activeTrackIds: activeIds,
+            activeTrackIds: allIds,
             resolution: resolution
         )
-        
+
         for track in finalizedTracks {
-            uploadTrack(track)
+            // Final upload only if C explicitly told us this track terminated
+            let isFinal = terminatingTracks.contains(track.trackId)
+            uploadTrack(track, isFinalUpload: isFinal)
+            terminatingTracks.remove(track.trackId)
         }
     }
 

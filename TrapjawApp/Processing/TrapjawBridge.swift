@@ -35,6 +35,10 @@ final class TrapjawBridge {
     /// Callback invoked on the processing thread with per-frame pipeline timing.
     var onDebugFrame: ((Double, UInt32, UInt64, String) -> Void)?  // (pipelineMs, activeTracks, frameIndex, status)
 
+    /// Callback invoked on the processing thread when a track terminates.
+    /// (trackId, confirmed, numCrops, metrics)
+    var onTrackTerminated: ((UInt32, Bool, UInt32, tj_topology_result_t) -> Void)?
+
     // MARK: - Lifecycle
 
     /// Initialize trapjaw with the given config and Metal device.
@@ -72,6 +76,12 @@ final class TrapjawBridge {
             guard let frame = frame, let userData = userData else { return }
             let bridge = Unmanaged<TrapjawBridge>.fromOpaque(userData).takeUnretainedValue()
             bridge.handleDebugFrame(frame.pointee)
+        }, selfPtr)
+
+        tj_set_track_terminated_callback(ctx, { (trackId, confirmed, numCrops, metrics, userData) in
+            guard let metrics = metrics, let userData = userData else { return }
+            let bridge = Unmanaged<TrapjawBridge>.fromOpaque(userData).takeUnretainedValue()
+            bridge.handleTrackTerminated(trackId: trackId, confirmed: confirmed, numCrops: numCrops, metrics: metrics.pointee)
         }, selfPtr)
     }
 
@@ -186,6 +196,23 @@ final class TrapjawBridge {
         return tj_get_stitched_id(ctx, rawTrackId)
     }
 
+    /// Get ALL non-terminated track IDs (including INITIALIZING, ACTIVE, LOST).
+    func getAllTrackIds() -> Set<UInt32> {
+        guard let ctx = context else { return [] }
+
+        let count = tj_get_all_tracks(ctx, nil, 0)
+        guard count > 0 else { return [] }
+
+        var tracks = [tj_track_t](repeating: tj_track_t(), count: Int(count))
+        let actualCount = tj_get_all_tracks(ctx, &tracks, count)
+
+        var trackIds = Set<UInt32>()
+        for i in 0..<Int(actualCount) {
+            trackIds.insert(tracks[i].id)
+        }
+        return trackIds
+    }
+
     // MARK: - Callback Handlers
 
     private func handleCrop(_ crop: tj_crop_t) {
@@ -229,6 +256,11 @@ final class TrapjawBridge {
             bridgeLog.info("handleDebugFrame #\(myCount): pipeline_ms=\(String(format: "%.2f", frame.pipeline_time_ms)) tracks=\(frame.active_track_count) blobs=\(frame.blob_count) frame=\(frame.frame_index) status=\(status)")
         }
         onDebugFrame?(frame.pipeline_time_ms, frame.active_track_count, frame.frame_index, status)
+    }
+
+    private func handleTrackTerminated(trackId: UInt32, confirmed: Bool, numCrops: UInt32, metrics: tj_topology_result_t) {
+        bridgeLog.info("handleTrackTerminated: track=\(trackId) confirmed=\(confirmed) crops=\(numCrops) passes=\(metrics.passes)")
+        onTrackTerminated?(trackId, confirmed, numCrops, metrics)
     }
 }
 

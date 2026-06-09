@@ -365,7 +365,7 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
-        if videoClipManager?.isRecording == true {
+        if videoClipManager?.isRecordingActive() == true {
             videoClipManager?.appendSampleBuffer(sampleBuffer)
         }
         delegate?.cameraManager(self, didOutput: sampleBuffer)

@@ -25,7 +25,10 @@ final class VideoClipManager: ObservableObject {
     @Published private(set) var isRecording: Bool = false
     @Published private(set) var isUploading: Bool = false
     @Published private(set) var lastUploadDate: Date?
-    
+
+    /// Thread-safe recording state for camera-output queue reads.
+    private let recordingLock = OSAllocatedUnfairLock(initialState: false)
+
     private var timer: Timer?
     private var lastCapturedKey: String?
     private var recordingStartDate: Date?
@@ -57,9 +60,22 @@ final class VideoClipManager: ObservableObject {
     deinit {
         stop()
     }
-    
+
+    // MARK: - Thread-safe recording state
+
+    private func setRecordingState(_ value: Bool) {
+        recordingLock.withLock { $0 = value }
+        DispatchQueue.main.async {
+            self.isRecording = value
+        }
+    }
+
+    func isRecordingActive() -> Bool {
+        recordingLock.withLock { $0 }
+    }
+
     // MARK: - Public API
-    
+
     /// Manually trigger a video clip recording (for UI button).
     func recordNow() {
         guard !isRecording && !isUploading else { return }
@@ -191,8 +207,8 @@ final class VideoClipManager: ObservableObject {
         writerStartTime = nil
         lastPresentationTime = .zero
         frameCount = 0
-        
-        isRecording = true
+
+        setRecordingState(true)
         recordingStartDate = Date()
         
         logger.info("Video recording started: \(filename)")
@@ -207,7 +223,7 @@ final class VideoClipManager: ObservableObject {
     /// Append a CMSampleBuffer from the camera to the video recording.
     /// Called from CameraManager's captureOutput delegate when isRecording is true.
     func appendSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
-        guard isRecording, let writer = assetWriter, let input = assetWriterInput else { return }
+        guard isRecordingActive(), let writer = assetWriter, let input = assetWriterInput else { return }
         guard writer.status == .writing else { return }
         
         let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
@@ -231,9 +247,9 @@ final class VideoClipManager: ObservableObject {
     }
     
     private func stopRecording(cancel: Bool) {
-        guard isRecording else { return }
-        
-        isRecording = false
+        guard isRecordingActive() else { return }
+
+        setRecordingState(false)
         recordingTimer?.invalidate()
         recordingTimer = nil
         
@@ -275,6 +291,7 @@ final class VideoClipManager: ObservableObject {
         pixelBufferAdaptor = nil
         writerStartTime = nil
         frameCount = 0
+        outputURL = nil
     }
     
     // MARK: - Upload
@@ -321,13 +338,12 @@ final class VideoClipManager: ObservableObject {
                     self?.lastUploadDate = Date()
                     logger.info("Video clip uploaded successfully")
                     print("[VIDEO] Upload succeeded: \(filename)")
-                    
-                    // Clean up temp file
-                    try? FileManager.default.removeItem(at: fileURL)
-} else {
+                } else {
                     logger.error("Video clip upload failed")
                     print("[VIDEO] Upload failed: \(filename)")
                 }
+                // Clean up temp file regardless of success or failure
+                try? FileManager.default.removeItem(at: fileURL)
             }
         }
     }

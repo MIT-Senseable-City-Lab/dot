@@ -33,7 +33,7 @@ final class TrackBuffer {
     private var lastCropFrame: [UInt32: UInt64] = [:]
     private var stitchedIds: [UInt32: UInt32] = [:]
     
-    let maxCropsPerTrack: Int = 150
+    let maxCropsPerTrack: Int = 15
     let terminationCheckInterval: UInt64 = 60
     
     private init() {}
@@ -130,10 +130,13 @@ final class TrackBuffer {
         
         // Update the uploaded count for next batch
         uploadedCropCounts[trackId] = startIndex + trackCrops.count
-        
+
         crops.removeValue(forKey: trackId)
         lastCropFrame.removeValue(forKey: trackId)
         stitchedIds.removeValue(forKey: trackId)
+
+        // Clear the count for this track ID so recycled IDs start fresh
+        uploadedCropCounts.removeValue(forKey: trackId)
         
         return FinalizedTrack(
             trackId: trackId,
