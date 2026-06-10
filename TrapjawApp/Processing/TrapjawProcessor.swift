@@ -124,8 +124,9 @@ init(config: tj_config_t? = nil) {
         
         self.config = cfg
         
-        // Initialize 4K frame buffer (10 frames ~330MB)
-        self.fourKBuffer = FourKFrameBuffer(maxFrames: 10)
+        // Initialize 4K frame buffer (5 frames ~165MB)
+        // With aligned crop sampling (every 2nd frame), 5 frames = 10 frames of runway
+        self.fourKBuffer = FourKFrameBuffer(maxFrames: 5)
         
         // Initialize Metal downscaler for 4K→1080p
         self.downscaler = MetalDownscaler(device: metalDevice)
@@ -735,12 +736,18 @@ extension TrapjawProcessor: CameraManagerDelegate {
         }
         
         // Stage: Buffer storage (skip during motion pause to save ~330MB)
+        // Only save frames where crops will be emitted (aligned with trapjaw crop sampling)
         let t0 = CFAbsoluteTimeGetCurrent()
         let shouldBuffer = motionPauseLock.withLock { !self.isMotionPaused }
-        if shouldBuffer {
+        let isCropFrame = currentIndex % UInt64(self.config.crop_sampling_interval) == 0
+        if shouldBuffer && isCropFrame {
             fourKBuffer?.add(pixelBuffer: pixelBuffer4K, frameIndex: currentIndex)
         } else if currentIndex % 60 == 0 {
-            print("[BUFFER] Skipping 4K buffer storage during motion pause (frame \(currentIndex))")
+            if !shouldBuffer {
+                print("[BUFFER] Skipping 4K buffer storage during motion pause (frame \(currentIndex))")
+            } else {
+                print("[BUFFER] Skipping non-crop frame (frame \(currentIndex), interval=\(self.config.crop_sampling_interval))")
+            }
         }
         let t1 = CFAbsoluteTimeGetCurrent()
         timing.record(stage: &timing.bufferStore, durationMs: (t1 - t0) * 1000)
