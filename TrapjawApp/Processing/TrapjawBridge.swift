@@ -173,7 +173,7 @@ final class TrapjawBridge {
         return tj_get_active_tracks(ctx, nil, 0)
     }
     
-    /// Get the set of currently active track IDs.
+    /// Get the set of currently active track IDs (resolved to stitched IDs).
     func getActiveTrackIds() -> Set<UInt32> {
         guard let ctx = context else { return [] }
         
@@ -185,7 +185,7 @@ final class TrapjawBridge {
         
         var trackIds = Set<UInt32>()
         for i in 0..<Int(actualCount) {
-            trackIds.insert(tracks[i].id)
+            trackIds.insert(tj_get_stitched_id(ctx, tracks[i].id))
         }
         return trackIds
     }
@@ -196,7 +196,8 @@ final class TrapjawBridge {
         return tj_get_stitched_id(ctx, rawTrackId)
     }
 
-    /// Get ALL non-terminated track IDs (including INITIALIZING, ACTIVE, LOST).
+    /// Get ALL non-terminated track IDs (including INITIALIZING, ACTIVE, LOST),
+    /// resolved to stitched IDs so they match the IDs used in TrackBuffer.
     func getAllTrackIds() -> Set<UInt32> {
         guard let ctx = context else { return [] }
 
@@ -208,7 +209,7 @@ final class TrapjawBridge {
 
         var trackIds = Set<UInt32>()
         for i in 0..<Int(actualCount) {
-            trackIds.insert(tracks[i].id)
+            trackIds.insert(tj_get_stitched_id(ctx, tracks[i].id))
         }
         return trackIds
     }
