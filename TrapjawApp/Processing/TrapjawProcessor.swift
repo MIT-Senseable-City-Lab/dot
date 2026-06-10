@@ -510,9 +510,9 @@ init(config: tj_config_t? = nil) {
             nil
         ) else { return nil }
         
-        let options: [CFString: Any] = [
-            kCGImageDestinationLossyCompressionQuality: 1.0
-        ]
+		let options: [CFString: Any] = [
+			kCGImageDestinationLossyCompressionQuality: 0.85
+		]
         CGImageDestinationAddImage(destination, cgImage, options as CFDictionary)
         
         guard CGImageDestinationFinalize(destination) else { return nil }
