@@ -34,7 +34,7 @@ final class TrackBuffer {
     private var lastCropFrame: [UInt32: UInt64] = [:]
     private var stitchedIds: [UInt32: UInt32] = [:]
     
-    let maxCropsPerTrack: Int = 30
+    let maxCropsPerTrack: Int = 15
     let terminationCheckInterval: UInt64 = 60
     
     private init() {}

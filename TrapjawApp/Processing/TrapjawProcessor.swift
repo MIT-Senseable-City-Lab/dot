@@ -72,6 +72,8 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     private var lastTerminationTrackCount: Int = 0
     private var terminatingTracks: Set<UInt32> = []
     private let terminatingTracksLock = OSAllocatedUnfairLock<Void>()
+    private let motionPauseLock = OSAllocatedUnfairLock<Void>()
+    private var isMotionPaused: Bool = false
     private var startTime: CFAbsoluteTime = 0
     private let config: tj_config_t
     private let statsUpdateInterval: UInt64 = 30
@@ -732,9 +734,14 @@ extension TrapjawProcessor: CameraManagerDelegate {
             print("[FRAME] idx=\(currentIndex), warmupCount=\(warmupFramesProcessed), state=\(state.rawValue)")
         }
         
-        // Stage: Buffer storage
+        // Stage: Buffer storage (skip during motion pause to save ~330MB)
         let t0 = CFAbsoluteTimeGetCurrent()
-        fourKBuffer?.add(pixelBuffer: pixelBuffer4K, frameIndex: currentIndex)
+        let shouldBuffer = motionPauseLock.withLock { !self.isMotionPaused }
+        if shouldBuffer {
+            fourKBuffer?.add(pixelBuffer: pixelBuffer4K, frameIndex: currentIndex)
+        } else if currentIndex % 60 == 0 {
+            print("[BUFFER] Skipping 4K buffer storage during motion pause (frame \(currentIndex))")
+        }
         let t1 = CFAbsoluteTimeGetCurrent()
         timing.record(stage: &timing.bufferStore, durationMs: (t1 - t0) * 1000)
         
@@ -777,8 +784,13 @@ extension TrapjawProcessor: CameraManagerDelegate {
                 if result == TJ_ERROR_NOT_READY && self.warmupFramesProcessed < 5 {
                     procLog.info("Frame \(currentIndex): TJ_ERROR_NOT_READY (warmup)")
                 }
-                if result == TJ_ERROR_MOTION_PAUSE && currentIndex % 30 == 0 {
-                    procLog.info("Frame \(currentIndex): TJ_ERROR_MOTION_PAUSE (global motion detected)")
+                if result == TJ_ERROR_MOTION_PAUSE {
+                    self.motionPauseLock.withLock { self.isMotionPaused = true }
+                    if currentIndex % 30 == 0 {
+                        procLog.info("Frame \(currentIndex): TJ_ERROR_MOTION_PAUSE (global motion detected)")
+                    }
+                } else {
+                    self.motionPauseLock.withLock { self.isMotionPaused = false }
                 }
             } else if let r = result, r != TJ_OK {
                 procLog.error("Frame \(currentIndex): tj_process_frame returned \(r.rawValue)")
