@@ -107,8 +107,8 @@ final class CameraManager: NSObject {
         do {
             try device.lockForConfiguration()
             
-            // Frame rate: 30fps for consistent pipeline timing
-            let targetFPS = CMTimeMake(value: 1, timescale: 30)
+            // Frame rate: 15fps for consistent pipeline timing
+            let targetFPS = CMTimeMake(value: 1, timescale: 15)
             device.activeVideoMinFrameDuration = targetFPS
             device.activeVideoMaxFrameDuration = targetFPS
             

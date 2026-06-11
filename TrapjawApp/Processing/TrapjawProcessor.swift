@@ -100,7 +100,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     // MARK: - Luminance-Based Exposure Release
     
     private var luminanceHistory: [Float] = []
-    private let luminanceHistorySize = 150  // 5 seconds at 30fps
+    private let luminanceHistorySize = 75   // 5 seconds at 15fps
     private let luminanceReleaseThreshold: Float = 0.50
     private let luminanceLogInterval: UInt64 = 30
     
@@ -132,7 +132,7 @@ init(config: tj_config_t? = nil) {
         self.config = cfg
         
         // Initialize 4K frame buffer (5 frames ~165MB)
-        // With aligned crop sampling (every 2nd frame), 5 frames = 10 frames of runway
+        // At 15fps with every-frame sampling, 5 frames = 5 frames of runway
         self.fourKBuffer = FourKFrameBuffer(maxFrames: 5)
         
         // Initialize Metal downscaler for 4K→1080p
@@ -588,7 +588,7 @@ init(config: tj_config_t? = nil) {
         let firstFrameIndex = track.startIndex
         let points = track.crops.map { crop -> TrackNode in
             TrackNode(
-                timestamp: Date().addingTimeInterval(Double(crop.frameIndex - UInt64(firstFrameIndex)) / 30.0),
+                timestamp: Date().addingTimeInterval(Double(crop.frameIndex - UInt64(firstFrameIndex)) / 15.0),
                 x: crop.bbox.origin.x,
                 y: crop.bbox.origin.y,
                 width: crop.bbox.size.width,
@@ -796,18 +796,13 @@ extension TrapjawProcessor: CameraManagerDelegate {
         }
         
         // Stage: Buffer storage (skip during motion pause to save ~330MB)
-        // Only save frames where crops will be emitted (aligned with trapjaw crop sampling)
+        // With every-frame sampling at 15fps, buffer all frames
         let t0 = CFAbsoluteTimeGetCurrent()
         let shouldBuffer = motionPauseLock.withLock { !self.isMotionPaused }
-        let isCropFrame = currentIndex % UInt64(self.config.crop_sampling_interval) == 0
-        if shouldBuffer && isCropFrame {
+        if shouldBuffer {
             fourKBuffer?.add(pixelBuffer: pixelBuffer4K, frameIndex: currentIndex)
         } else if currentIndex % 60 == 0 {
-            if !shouldBuffer {
-                print("[BUFFER] Skipping 4K buffer storage during motion pause (frame \(currentIndex))")
-            } else {
-                print("[BUFFER] Skipping non-crop frame (frame \(currentIndex), interval=\(self.config.crop_sampling_interval))")
-            }
+            print("[BUFFER] Skipping 4K buffer storage during motion pause (frame \(currentIndex))")
         }
         let t1 = CFAbsoluteTimeGetCurrent()
         timing.record(stage: &timing.bufferStore, durationMs: (t1 - t0) * 1000)
