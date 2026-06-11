@@ -420,22 +420,16 @@ init(config: tj_config_t? = nil) {
             print("[CROP-DIAG] Requesting frame \(frameIndex), buffer depth: \(bufferDepth), drops: missing=\(cropsDroppedMissingFrame), failed=\(cropsDroppedExtractionFailed)")
         }
         
-        // Look up buffer synchronously BEFORE dispatching to jpegQueue
-        // so the pixel buffer is retained and can't be evicted while queued.
-        guard let pixelBuffer4K = self.fourKBuffer?.get(frameIndex: frameIndex) else {
-            self.cropsDroppedMissingFrame += 1
-            if totalCropsReceived % 20 == 1 {
-                print("[CROP-DIAG] ❌ Frame \(frameIndex) NOT FOUND in buffer (dropped)")
-            }
-            return
-        }
-        
-        if totalCropsReceived % 20 == 1 {
-            print("[CROP-DIAG] ✅ Frame \(frameIndex) retrieved successfully")
-        }
-        
-        jpegQueue.async { [weak self, pixelBuffer4K] in
+        // Dispatch to jpegQueue — look up frame inside closure to avoid retaining pixelBuffer
+        jpegQueue.async { [weak self] in
             guard let self else { return }
+            
+            // Look up frame when job actually runs (not when queued)
+            // This prevents pixelBuffer retention in the queue
+            guard let pixelBuffer4K = self.fourKBuffer?.get(frameIndex: frameIndex) else {
+                self.cropsDroppedMissingFrame += 1
+                return
+            }
             
             // Extract crop from 4K frame and convert to JPEG (CoreImage preserves color accuracy)
             guard let jpegData = self.extractCropFrom4K(
