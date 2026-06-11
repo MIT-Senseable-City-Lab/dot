@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -42,6 +42,16 @@
 		D393283CB254474BA996CACE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3741E1D8C0874043A9B52491 /* SettingsView.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		F8A07DB02FDAEDA9004BC2BB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1000188 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A100018F;
+			remoteInfo = TrapjawApp;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		3741E1D8C0874043A9B52491 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SettingsView.swift; path = TrapjawApp/Settings/SettingsView.swift; sourceTree = SOURCE_ROOT; };
 		A1000190 /* TrapjawApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TrapjawApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -79,7 +89,12 @@
 		A1000200 /* BackgroundCaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundCaptureManager.swift; sourceTree = "<group>"; };
 		A1000205 /* VideoClipManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoClipManager.swift; sourceTree = "<group>"; };
 		BAA04920B6615C1AA0A39D8B /* SettingsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SettingsManager.swift; path = TrapjawApp/Settings/SettingsManager.swift; sourceTree = SOURCE_ROOT; };
+		F8A07DAC2FDAEDA9004BC2BB /* TrapjawAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TrapjawAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		F8A07DAD2FDAEDA9004BC2BB /* TrapjawAppTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = TrapjawAppTests; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A100018D /* Frameworks */ = {
@@ -96,6 +111,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F8A07DA92FDAEDA9004BC2BB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -103,6 +125,7 @@
 			isa = PBXGroup;
 			children = (
 				A1000192 /* TrapjawApp */,
+				F8A07DAD2FDAEDA9004BC2BB /* TrapjawAppTests */,
 				A1000191 /* Products */,
 				A10001B7 /* Frameworks */,
 				BAA04920B6615C1AA0A39D8B /* SettingsManager.swift */,
@@ -114,6 +137,7 @@
 			isa = PBXGroup;
 			children = (
 				A1000190 /* TrapjawApp.app */,
+				F8A07DAC2FDAEDA9004BC2BB /* TrapjawAppTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -151,9 +175,9 @@
 				A10001A5 /* TrapjawProcessor.swift */,
 				A10001A6 /* PerformanceMetrics.swift */,
 				A10001E3 /* TrackBuffer.swift */,
-				A10001E9 /* TimeWindowManager.swift */,
 				A10001F1 /* FourKFrameBuffer.swift */,
 				A1000200 /* BackgroundCaptureManager.swift */,
+				A10001E9 /* TimeWindowManager.swift */,
 				A1000205 /* VideoClipManager.swift */,
 				A10001F3 /* MetalDownscaler.swift */,
 				A10001F7 /* TimingMetrics.swift */,
@@ -225,6 +249,29 @@
 			productReference = A1000190 /* TrapjawApp.app */;
 			productType = "com.apple.product-type.application";
 		};
+		F8A07DAB2FDAEDA9004BC2BB /* TrapjawAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F8A07DB22FDAEDA9004BC2BB /* Build configuration list for PBXNativeTarget "TrapjawAppTests" */;
+			buildPhases = (
+				F8A07DA82FDAEDA9004BC2BB /* Sources */,
+				F8A07DA92FDAEDA9004BC2BB /* Frameworks */,
+				F8A07DAA2FDAEDA9004BC2BB /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F8A07DB12FDAEDA9004BC2BB /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				F8A07DAD2FDAEDA9004BC2BB /* TrapjawAppTests */,
+			);
+			name = TrapjawAppTests;
+			packageProductDependencies = (
+			);
+			productName = TrapjawAppTests;
+			productReference = F8A07DAC2FDAEDA9004BC2BB /* TrapjawAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -232,11 +279,15 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1520;
+				LastSwiftUpdateCheck = 2620;
 				LastUpgradeCheck = 1520;
 				TargetAttributes = {
 					A100018F = {
 						CreatedOnToolsVersion = 15.2;
+					};
+					F8A07DAB2FDAEDA9004BC2BB = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = A100018F;
 					};
 				};
 			};
@@ -254,6 +305,7 @@
 			projectRoot = "";
 			targets = (
 				A100018F /* TrapjawApp */,
+				F8A07DAB2FDAEDA9004BC2BB /* TrapjawAppTests */,
 			);
 		};
 /* End PBXProject section */
@@ -266,6 +318,13 @@
 				A10001B5 /* LaunchScreen.storyboard in Resources */,
 				A10001B2 /* Assets.xcassets in Resources */,
 				A10001C7 /* trapjaw.metallib in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F8A07DAA2FDAEDA9004BC2BB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -302,7 +361,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F8A07DA82FDAEDA9004BC2BB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		F8A07DB12FDAEDA9004BC2BB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A100018F /* TrapjawApp */;
+			targetProxy = F8A07DB02FDAEDA9004BC2BB /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A10001D0 /* Debug */ = {
@@ -494,6 +568,66 @@
 			};
 			name = Release;
 		};
+		F8A07DB32FDAEDA9004BC2BB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = A35W4MM59Y;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/trapjaw/include";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aase.TrapjawAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = "TrapjawApp/Bridge/TrapjawApp-Bridging-Header.h";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TrapjawApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TrapjawApp";
+			};
+			name = Debug;
+		};
+		F8A07DB42FDAEDA9004BC2BB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = A35W4MM59Y;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/trapjaw/include";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aase.TrapjawAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = "TrapjawApp/Bridge/TrapjawApp-Bridging-Header.h";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TrapjawApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TrapjawApp";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -511,6 +645,15 @@
 			buildConfigurations = (
 				A10001D3 /* Debug */,
 				A10001D4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F8A07DB22FDAEDA9004BC2BB /* Build configuration list for PBXNativeTarget "TrapjawAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F8A07DB32FDAEDA9004BC2BB /* Debug */,
+				F8A07DB42FDAEDA9004BC2BB /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

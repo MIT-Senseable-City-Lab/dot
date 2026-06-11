@@ -26,8 +26,26 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     // MARK: - Public State
 
     let metrics = PerformanceMetrics()
-    private(set) var isRunning = false
-    private(set) var isStarting = false
+    private let runningLock = OSAllocatedUnfairLock(initialState: false)
+    private let startingLock = OSAllocatedUnfairLock(initialState: false)
+    private let emergencyStoppedLock = OSAllocatedUnfairLock(initialState: false)
+    private let shuttingDownLock = OSAllocatedUnfairLock(initialState: false)
+    private(set) var isRunning: Bool {
+        get { runningLock.withLock { $0 } }
+        set { runningLock.withLock { $0 = newValue } }
+    }
+    private(set) var isStarting: Bool {
+        get { startingLock.withLock { $0 } }
+        set { startingLock.withLock { $0 = newValue } }
+    }
+    private(set) var isEmergencyStopped: Bool {
+        get { emergencyStoppedLock.withLock { $0 } }
+        set { emergencyStoppedLock.withLock { $0 = newValue } }
+    }
+    private(set) var isShuttingDown: Bool {
+        get { shuttingDownLock.withLock { $0 } }
+        set { shuttingDownLock.withLock { $0 = newValue } }
+    }
     private(set) var error: Error?
     private(set) var state: ProcessorState = .idle
     private(set) var isConnected: Bool = false
@@ -51,7 +69,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     // MARK: - Dependencies
 
     let cameraManager = CameraManager()
-    private var bridge: TrapjawBridge?
+    private(set) var bridge: TrapjawBridge?
     private let metalDevice: MTLDevice?
     
     // MARK: - 4K Processing
@@ -93,7 +111,11 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     private let timing = TimingMetrics()
     private let timingLogInterval: UInt64 = 60
     
-    // MARK: - JPEG Conversion Queue
+    // MARK: - Queues
+    
+    /// Serial queue for all frame processing (downscale, bridge, crop dispatch).
+    /// Ensures pause() can wait for all in-flight work before destroying the bridge.
+    private let processingQueue = DispatchQueue(label: "com.trapjaw.processing", qos: .userInitiated)
     
     private let jpegQueue = DispatchQueue(label: "com.trapjaw.jpeg", qos: .utility, attributes: .concurrent)
     
@@ -109,7 +131,6 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     private var memoryGuardWorkItem: DispatchWorkItem?
     private let memoryCheckInterval: TimeInterval = 5.0
     private let memoryThresholdMB: Double = 900
-    private var isEmergencyStopped: Bool = false
 
     // MARK: - Init
 
@@ -235,7 +256,7 @@ init(config: tj_config_t? = nil) {
     // MARK: - Lifecycle
 
     func start() async {
-        guard !isRunning && !isStarting else { return }
+        guard !isRunning && !isStarting && !isShuttingDown else { return }
         isStarting = true
 
         state = .configuring
@@ -343,7 +364,10 @@ init(config: tj_config_t? = nil) {
     // MARK: - Pause/Resume for Operating Hours
     
     func pause() {
-        guard isRunning && !isStarting else { return }
+        guard isRunning && !isStarting && !isShuttingDown else { return }
+        
+        // Signal shutdown so that new frame processing is rejected immediately
+        isShuttingDown = true
         
         memoryGuardWorkItem?.cancel()
         memoryGuardWorkItem = nil
@@ -352,16 +376,27 @@ init(config: tj_config_t? = nil) {
         videoClipManager?.stop()
         state = .stopping
         
-        // Stop camera first to stop new frames
+        // Stop camera first to stop new frames arriving
         cameraManager.stop()
         
-        // Upload any remaining tracks before pausing
+        // Wait for the camera output queue to finish the current didOutput call
+        // before we touch any shared state.
+        cameraManager.waitForOutputQueue()
+        
+        // Wait for all in-flight processing (downscale, bridge, crop dispatch)
+        // to finish before we destroy the bridge or touch C state.
+        processingQueue.sync { }
+        
+        // Wait for all pending JPEG encoding to finish
+        jpegQueue.sync(flags: .barrier) { }
+        
+        // Now it is safe to flush remaining tracks and upload them
         flushRemainingTracks()
         
         // Stop networking
         dataStreamer.stop()
         
-        // Flush and release pipeline
+        // Now it is safe to flush and destroy the bridge — no C callbacks are in flight.
         bridge?.flush()
         bridge = nil
         
@@ -369,11 +404,12 @@ init(config: tj_config_t? = nil) {
         fourKBuffer?.clear()
         
         isRunning = false
+        isShuttingDown = false
         state = .paused
     }
     
     func resume() async {
-        guard !isRunning && !isStarting else { return }
+        guard !isRunning && !isStarting && !isShuttingDown else { return }
         await start()
     }
     
@@ -761,7 +797,8 @@ init(config: tj_config_t? = nil) {
 
 extension TrapjawProcessor: CameraManagerDelegate {
     func cameraManager(_ manager: CameraManager, didOutput sampleBuffer: CMSampleBuffer) {
-        guard let _ = bridge, isRunning, !isEmergencyStopped else { return }
+        // Reject new frames immediately if we are shutting down or not running.
+        guard let _ = bridge, isRunning, !isEmergencyStopped, !isShuttingDown else { return }
         
         // Skip processing during cool-down periods (but keep buffering frames)
         if CoolDownManager.shared.isCoolingDown {
@@ -795,89 +832,98 @@ extension TrapjawProcessor: CameraManagerDelegate {
             print("[FRAME] idx=\(currentIndex), warmupCount=\(warmupFramesProcessed), state=\(state.rawValue)")
         }
         
-        // Stage: Buffer storage (skip during motion pause to save ~330MB)
-        // With every-frame sampling at 15fps, buffer all frames
-        let t0 = CFAbsoluteTimeGetCurrent()
-        let shouldBuffer = motionPauseLock.withLock { !self.isMotionPaused }
-        if shouldBuffer {
-            fourKBuffer?.add(pixelBuffer: pixelBuffer4K, frameIndex: currentIndex)
-        } else if currentIndex % 60 == 0 {
-            print("[BUFFER] Skipping 4K buffer storage during motion pause (frame \(currentIndex))")
-        }
-        let t1 = CFAbsoluteTimeGetCurrent()
-        timing.record(stage: &timing.bufferStore, durationMs: (t1 - t0) * 1000)
-        
-        // Async downscale 4K → 1080p (average for better small-object preservation)
-        let t2 = CFAbsoluteTimeGetCurrent()
-        downscaler?.downscale(inputBuffer: pixelBuffer4K, quality: .average) { [weak self] pixelBuffer1080p in
-            guard let self = self else { return }
+        // Dispatch all heavy work to the serial processingQueue.
+        // This ensures pause() can wait for every frame to finish before destroying the bridge.
+        processingQueue.async { [weak self] in
+            guard let self = self, self.isRunning, !self.isShuttingDown else { return }
             
-            let t3 = CFAbsoluteTimeGetCurrent()
-            self.timing.record(stage: &self.timing.downscale, durationMs: (t3 - t2) * 1000)
-            
-            guard let pixelBuffer1080p = pixelBuffer1080p else {
-                print("[ERROR] Downscale failed for frame \(currentIndex)")
-                return
+            // Stage: Buffer storage (skip during motion pause to save ~330MB)
+            let t0 = CFAbsoluteTimeGetCurrent()
+            let shouldBuffer = self.motionPauseLock.withLock { !self.isMotionPaused }
+            if shouldBuffer {
+                self.fourKBuffer?.add(pixelBuffer: pixelBuffer4K, frameIndex: currentIndex)
+            } else if currentIndex % 60 == 0 {
+                print("[BUFFER] Skipping 4K buffer storage during motion pause (frame \(currentIndex))")
             }
+            let t1 = CFAbsoluteTimeGetCurrent()
+            self.timing.record(stage: &self.timing.bufferStore, durationMs: (t1 - t0) * 1000)
             
-            // Diagnostic: Check frame processing order
-            if currentIndex <= self.lastProcessedFrame {
-                print("[ORDER] ⚠️ OUT OF ORDER: Frame \(currentIndex) processed after frame \(self.lastProcessedFrame)")
-            } else if currentIndex > self.lastProcessedFrame + 1 {
-                let gap = currentIndex - self.lastProcessedFrame - 1
-                print("[ORDER] Gap detected: Frame \(currentIndex) after \(self.lastProcessedFrame) (missed \(gap) frames)")
-            }
-            self.lastProcessedFrame = currentIndex
-            
-            // Stage: Trapjaw processing
-            let t4 = CFAbsoluteTimeGetCurrent()
-            let result = self.bridge?.processFrame(
-                pixelBuffer: pixelBuffer1080p,
-                frameIndex: currentIndex,
-                timestamp: timestamp
-            )
-            let t5 = CFAbsoluteTimeGetCurrent()
-            self.timing.record(stage: &self.timing.trapjawProcess, durationMs: (t5 - t4) * 1000)
-            
-            if result == TJ_OK || result == TJ_ERROR_NOT_READY || result == TJ_ERROR_MOTION_PAUSE {
-                DispatchQueue.main.async { [weak self] in
-                    self?.metrics.recordProcessedFrame()
-                }
-                if result == TJ_ERROR_NOT_READY && self.warmupFramesProcessed < 5 {
-                    procLog.info("Frame \(currentIndex): TJ_ERROR_NOT_READY (warmup)")
-                }
-                if result == TJ_ERROR_MOTION_PAUSE {
-                    self.motionPauseLock.withLock { self.isMotionPaused = true }
-                    if currentIndex % 30 == 0 {
-                        procLog.info("Frame \(currentIndex): TJ_ERROR_MOTION_PAUSE (global motion detected)")
+            // Async downscale 4K → 1080p
+            let t2 = CFAbsoluteTimeGetCurrent()
+            self.downscaler?.downscale(inputBuffer: pixelBuffer4K, quality: .average) { [weak self] pixelBuffer1080p in
+                // The downscale completion runs on a Metal callback queue.
+                // Dispatch back to the serial processingQueue so all downstream work is ordered.
+                self?.processingQueue.async { [weak self] in
+                    guard let self = self, self.isRunning, !self.isShuttingDown else { return }
+                    
+                    let t3 = CFAbsoluteTimeGetCurrent()
+                    self.timing.record(stage: &self.timing.downscale, durationMs: (t3 - t2) * 1000)
+                    
+                    guard let pixelBuffer1080p = pixelBuffer1080p else {
+                        print("[ERROR] Downscale failed for frame \(currentIndex)")
+                        return
                     }
-                } else {
-                    self.motionPauseLock.withLock { self.isMotionPaused = false }
-                }
-            } else if let r = result, r != TJ_OK {
-                procLog.error("Frame \(currentIndex): tj_process_frame returned \(r.rawValue)")
-            }
-            
-            // Luminance-based exposure release check (uses actual image brightness, not corrupted AE offset)
-            self.checkLuminanceAndReleaseIfNeeded(pixelBuffer: pixelBuffer1080p, frameIndex: currentIndex)
-            
-            // End frame timing
-            let _ = self.timing.endFrame()
-            
-            // Log timing summary every 60 frames
-            self.timing.logSummaryIfNeeded(frameIndex: currentIndex, bufferDepth: self.fourKBuffer?.currentCount ?? 0)
-            
-            // Flush Metal texture cache every 60 frames to prevent resource accumulation
-            if currentIndex % 60 == 0 {
-                self.downscaler?.flushTextureCache()
-            }
+                    
+                    // Diagnostic: Check frame processing order
+                    if currentIndex <= self.lastProcessedFrame {
+                        print("[ORDER] ⚠️ OUT OF ORDER: Frame \(currentIndex) processed after frame \(self.lastProcessedFrame)")
+                    } else if currentIndex > self.lastProcessedFrame + 1 {
+                        let gap = currentIndex - self.lastProcessedFrame - 1
+                        print("[ORDER] Gap detected: Frame \(currentIndex) after \(self.lastProcessedFrame) (missed \(gap) frames)")
+                    }
+                    self.lastProcessedFrame = currentIndex
+                    
+                    // Stage: Trapjaw processing
+                    let t4 = CFAbsoluteTimeGetCurrent()
+                    let result = self.bridge?.processFrame(
+                        pixelBuffer: pixelBuffer1080p,
+                        frameIndex: currentIndex,
+                        timestamp: timestamp
+                    )
+                    let t5 = CFAbsoluteTimeGetCurrent()
+                    self.timing.record(stage: &self.timing.trapjawProcess, durationMs: (t5 - t4) * 1000)
+                    
+                    if result == TJ_OK || result == TJ_ERROR_NOT_READY || result == TJ_ERROR_MOTION_PAUSE {
+                        DispatchQueue.main.async { [weak self] in
+                            self?.metrics.recordProcessedFrame()
+                        }
+                        if result == TJ_ERROR_NOT_READY && self.warmupFramesProcessed < 5 {
+                            procLog.info("Frame \(currentIndex): TJ_ERROR_NOT_READY (warmup)")
+                        }
+                        if result == TJ_ERROR_MOTION_PAUSE {
+                            self.motionPauseLock.withLock { self.isMotionPaused = true }
+                            if currentIndex % 30 == 0 {
+                                procLog.info("Frame \(currentIndex): TJ_ERROR_MOTION_PAUSE (global motion detected)")
+                            }
+                        } else {
+                            self.motionPauseLock.withLock { self.isMotionPaused = false }
+                        }
+                    } else if let r = result, r != TJ_OK {
+                        procLog.error("Frame \(currentIndex): tj_process_frame returned \(r.rawValue)")
+                    }
+                    
+                    // Luminance-based exposure release check
+                    self.checkLuminanceAndReleaseIfNeeded(pixelBuffer: pixelBuffer1080p, frameIndex: currentIndex)
+                    
+                    // End frame timing
+                    let _ = self.timing.endFrame()
+                    
+                    // Log timing summary every 60 frames
+                    self.timing.logSummaryIfNeeded(frameIndex: currentIndex, bufferDepth: self.fourKBuffer?.currentCount ?? 0)
+                    
+                    // Flush Metal texture cache every 60 frames
+                    if currentIndex % 60 == 0 {
+                        self.downscaler?.flushTextureCache()
+                    }
 
-            if currentIndex % self.statsUpdateInterval == 0 {
-                self.updateStats(warmupCount: self.warmupFramesProcessed)
-            }
-            
-            if currentIndex % self.terminationCheckInterval == 0 {
-                self.checkTerminatedTracks()
+                    if currentIndex % self.statsUpdateInterval == 0 {
+                        self.updateStats(warmupCount: self.warmupFramesProcessed)
+                    }
+                    
+                    if currentIndex % self.terminationCheckInterval == 0 {
+                        self.checkTerminatedTracks()
+                    }
+                }
             }
         }
     }
