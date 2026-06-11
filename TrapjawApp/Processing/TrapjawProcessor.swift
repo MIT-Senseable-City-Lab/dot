@@ -307,10 +307,13 @@ init(config: tj_config_t? = nil) {
             isRunning = true
             state = .warmingUp
             
-            // Start memory guard timer
-            memoryGuardTimer?.invalidate()
-            memoryGuardTimer = Timer.scheduledTimer(withTimeInterval: memoryCheckInterval, repeats: true) { _ in
-                self.checkMemory()
+            // Start memory guard timer on main thread (required for Timer to fire)
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.memoryGuardTimer?.invalidate()
+                self.memoryGuardTimer = Timer.scheduledTimer(withTimeInterval: self.memoryCheckInterval, repeats: true) { _ in
+                    self.checkMemory()
+                }
             }
 
         } catch {
@@ -383,6 +386,10 @@ init(config: tj_config_t? = nil) {
         guard isRunning else { return }
         
         let memoryMB = timing.memoryMB
+        // Diagnostic: log every check to verify timer is firing
+        if frameIndex % 60 == 0 {
+            print("[MEMORY] Check: \(Int(memoryMB))MB (threshold: \(Int(memoryThresholdMB))MB)")
+        }
         guard memoryMB > memoryThresholdMB else { return }
         
         print("[MEMORY] Guard triggered at \(Int(memoryMB))MB (threshold: \(Int(memoryThresholdMB))MB)")
