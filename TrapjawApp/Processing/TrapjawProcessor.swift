@@ -412,7 +412,7 @@ init(config: tj_config_t? = nil) {
         
         cameraManager.stop()
         fourKBuffer?.clear()
-        bridge?.flush()
+        // Don't flush bridge — keep background model alive for fast resume
         
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
             self?.emergencyResume()
@@ -423,8 +423,8 @@ init(config: tj_config_t? = nil) {
         isEmergencyStopped = false
         print("[MEMORY] Emergency resume")
         
+        state = .warmingUp
         cameraManager.start()
-        // State will be updated by normal processing flow (warmup → processing)
     }
     
     private func flushRemainingTracks() {
