@@ -106,7 +106,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     
     // MARK: - Memory Guard
     
-    private var memoryGuardTimer: Timer?
+    private var memoryGuardTimer: DispatchSourceTimer?
     private let memoryCheckInterval: TimeInterval = 5.0
     private let memoryThresholdMB: Double = 1200
     private var isEmergencyStopped: Bool = false
@@ -307,14 +307,14 @@ init(config: tj_config_t? = nil) {
             isRunning = true
             state = .warmingUp
             
-            // Start memory guard timer on main thread (required for Timer to fire)
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                self.memoryGuardTimer?.invalidate()
-                self.memoryGuardTimer = Timer.scheduledTimer(withTimeInterval: self.memoryCheckInterval, repeats: true) { _ in
-                    self.checkMemory()
-                }
+            // Start memory guard timer using DispatchSourceTimer (reliable, not RunLoop-dependent)
+            let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
+            timer.schedule(deadline: .now(), repeating: .seconds(Int(memoryCheckInterval)))
+            timer.setEventHandler { [weak self] in
+                self?.checkMemory()
             }
+            timer.resume()
+            memoryGuardTimer = timer
 
         } catch {
             procLog.error("TrapjawBridge init FAILED: \(error.localizedDescription)")
@@ -328,7 +328,7 @@ init(config: tj_config_t? = nil) {
     func stop() {
         guard isRunning else { return }
         
-        memoryGuardTimer?.invalidate()
+        memoryGuardTimer?.cancel()
         memoryGuardTimer = nil
 
         backgroundCaptureManager?.stop()
