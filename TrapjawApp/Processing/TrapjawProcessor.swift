@@ -106,7 +106,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     
     // MARK: - Memory Guard
     
-    private var memoryGuardTimer: DispatchSourceTimer?
+    private var memoryGuardWorkItem: DispatchWorkItem?
     private let memoryCheckInterval: TimeInterval = 5.0
     private let memoryThresholdMB: Double = 1200
     private var isEmergencyStopped: Bool = false
@@ -307,14 +307,8 @@ init(config: tj_config_t? = nil) {
             isRunning = true
             state = .warmingUp
             
-            // Start memory guard timer using DispatchSourceTimer (reliable, not RunLoop-dependent)
-            let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
-            timer.schedule(deadline: .now(), repeating: .seconds(Int(memoryCheckInterval)))
-            timer.setEventHandler { [weak self] in
-                self?.checkMemory()
-            }
-            timer.resume()
-            memoryGuardTimer = timer
+            // Start memory guard using recursive asyncAfter (most reliable scheduling)
+            startMemoryGuard()
 
         } catch {
             procLog.error("TrapjawBridge init FAILED: \(error.localizedDescription)")
@@ -328,8 +322,8 @@ init(config: tj_config_t? = nil) {
     func stop() {
         guard isRunning else { return }
         
-        memoryGuardTimer?.cancel()
-        memoryGuardTimer = nil
+        memoryGuardWorkItem?.cancel()
+        memoryGuardWorkItem = nil
 
         backgroundCaptureManager?.stop()
         videoClipManager?.stop()
@@ -350,6 +344,9 @@ init(config: tj_config_t? = nil) {
     
     func pause() {
         guard isRunning && !isStarting else { return }
+        
+        memoryGuardWorkItem?.cancel()
+        memoryGuardWorkItem = nil
         
         backgroundCaptureManager?.stop()
         videoClipManager?.stop()
@@ -386,14 +383,21 @@ init(config: tj_config_t? = nil) {
         guard isRunning else { return }
         
         let memoryMB = timing.memoryMB
-        // Diagnostic: log every check to verify timer is firing
-        if frameIndex % 60 == 0 {
-            print("[MEMORY] Check: \(Int(memoryMB))MB (threshold: \(Int(memoryThresholdMB))MB)")
-        }
+        print("[MEMORY] Check: \(Int(memoryMB))MB (threshold: \(Int(memoryThresholdMB))MB)")
         guard memoryMB > memoryThresholdMB else { return }
         
         print("[MEMORY] Guard triggered at \(Int(memoryMB))MB (threshold: \(Int(memoryThresholdMB))MB)")
         emergencyPause(duration: 5)
+    }
+    
+    private func startMemoryGuard() {
+        memoryGuardWorkItem?.cancel()
+        memoryGuardWorkItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            self.checkMemory()
+            self.startMemoryGuard()
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + memoryCheckInterval, execute: memoryGuardWorkItem!)
     }
     
     private func emergencyPause(duration: TimeInterval) {
