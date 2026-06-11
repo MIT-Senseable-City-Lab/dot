@@ -108,7 +108,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     
     private var memoryGuardWorkItem: DispatchWorkItem?
     private let memoryCheckInterval: TimeInterval = 5.0
-    private let memoryThresholdMB: Double = 1200
+    private let memoryThresholdMB: Double = 900
     private var isEmergencyStopped: Bool = false
 
     // MARK: - Init
