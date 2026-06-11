@@ -103,6 +103,13 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     private let luminanceHistorySize = 150  // 5 seconds at 30fps
     private let luminanceReleaseThreshold: Float = 0.50
     private let luminanceLogInterval: UInt64 = 30
+    
+    // MARK: - Memory Guard
+    
+    private var memoryGuardTimer: Timer?
+    private let memoryCheckInterval: TimeInterval = 5.0
+    private let memoryThresholdMB: Double = 1200
+    private var isEmergencyStopped: Bool = false
 
     // MARK: - Init
 
@@ -299,6 +306,12 @@ init(config: tj_config_t? = nil) {
             
             isRunning = true
             state = .warmingUp
+            
+            // Start memory guard timer
+            memoryGuardTimer?.invalidate()
+            memoryGuardTimer = Timer.scheduledTimer(withTimeInterval: memoryCheckInterval, repeats: true) { _ in
+                self.checkMemory()
+            }
 
         } catch {
             procLog.error("TrapjawBridge init FAILED: \(error.localizedDescription)")
@@ -311,6 +324,9 @@ init(config: tj_config_t? = nil) {
 
     func stop() {
         guard isRunning else { return }
+        
+        memoryGuardTimer?.invalidate()
+        memoryGuardTimer = nil
 
         backgroundCaptureManager?.stop()
         videoClipManager?.stop()
@@ -359,6 +375,45 @@ init(config: tj_config_t? = nil) {
     func resume() async {
         guard !isRunning && !isStarting else { return }
         await start()
+    }
+    
+    // MARK: - Memory Guard
+    
+    private func checkMemory() {
+        guard isRunning else { return }
+        
+        let memoryMB = timing.memoryMB
+        guard memoryMB > memoryThresholdMB else { return }
+        
+        print("[MEMORY] Guard triggered at \(Int(memoryMB))MB (threshold: \(Int(memoryThresholdMB))MB)")
+        emergencyPause(duration: 5)
+    }
+    
+    private func emergencyPause(duration: TimeInterval) {
+        guard !isEmergencyStopped else { return }
+        isEmergencyStopped = true
+        
+        print("[MEMORY] Emergency pause for \(Int(duration))s at \(Int(timing.memoryMB))MB")
+        
+        DispatchQueue.main.async { [weak self] in
+            self?.state = .idle
+        }
+        
+        cameraManager.stop()
+        fourKBuffer?.clear()
+        bridge?.flush()
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            self?.emergencyResume()
+        }
+    }
+    
+    private func emergencyResume() {
+        isEmergencyStopped = false
+        print("[MEMORY] Emergency resume")
+        
+        cameraManager.start()
+        // State will be updated by normal processing flow (warmup → processing)
     }
     
     private func flushRemainingTracks() {
@@ -695,7 +750,7 @@ init(config: tj_config_t? = nil) {
 
 extension TrapjawProcessor: CameraManagerDelegate {
     func cameraManager(_ manager: CameraManager, didOutput sampleBuffer: CMSampleBuffer) {
-        guard let _ = bridge, isRunning else { return }
+        guard let _ = bridge, isRunning, !isEmergencyStopped else { return }
         
         // Skip processing during cool-down periods (but keep buffering frames)
         if CoolDownManager.shared.isCoolingDown {
