@@ -112,8 +112,9 @@ final class CameraManager: NSObject {
         do {
             try device.lockForConfiguration()
             
-            // Frame rate: 15fps for consistent pipeline timing
-            let targetFPS = CMTimeMake(value: 1, timescale: 15)
+            // Request 30fps (4K format doesn't support 15fps on iPhone).
+            // TrapjawProcessor drops every other frame for 15fps processing.
+            let targetFPS = CMTimeMake(value: 1, timescale: 30)
             device.activeVideoMinFrameDuration = targetFPS
             device.activeVideoMaxFrameDuration = targetFPS
             

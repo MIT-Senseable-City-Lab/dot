@@ -126,6 +126,10 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     private let luminanceReleaseThreshold: Float = 0.50
     private let luminanceLogInterval: UInt64 = 30
     
+    // MARK: - Frame Skip (30fps camera → 15fps processing)
+
+    private var skipFrame = false
+
     // MARK: - Memory Guard
     
     private var memoryGuardWorkItem: DispatchWorkItem?
@@ -153,7 +157,9 @@ init(config: tj_config_t? = nil) {
         self.config = cfg
         
         // Initialize 4K frame buffer (5 frames ~165MB)
-        // At 15fps with every-frame sampling, 5 frames = 5 frames of runway
+        // At 15fps with every-frame sampling, 5 frames = 333ms of crop-extraction runway.
+        // Early get() in handleCrop eliminates the eviction window — frame is looked up
+        // ~32ms after storage, well within the 333ms budget.
         self.fourKBuffer = FourKFrameBuffer(maxFrames: 5)
         
         // Initialize Metal downscaler for 4K→1080p
@@ -522,18 +528,19 @@ init(config: tj_config_t? = nil) {
             print("[CROP-DIAG] Requesting frame \(frameIndex), buffer depth: \(bufferDepth), drops: missing=\(cropsDroppedMissingFrame), failed=\(cropsDroppedExtractionFailed)")
         }
         
-        // Dispatch to jpegQueue — look up frame inside closure to avoid retaining pixelBuffer
+        // Look up 4K frame NOW while still on the serial processingQueue.
+        // Frame N was just stored and is guaranteed to be in the buffer.
+        // Capturing the pixel buffer here (instead of inside jpegQueue.async)
+        // eliminates the eviction window — the closure retains the buffer
+        // via ARC even if the dictionary entry is later removed.
+        guard let pixelBuffer4K = fourKBuffer?.get(frameIndex: frameIndex) else {
+            cropsDroppedMissingFrame += 1
+            return
+        }
+
         jpegQueue.async { [weak self] in
             guard let self else { return }
-            
-            // Look up frame when job actually runs (not when queued)
-            // This prevents pixelBuffer retention in the queue
-            guard let pixelBuffer4K = self.fourKBuffer?.get(frameIndex: frameIndex) else {
-                self.cropsDroppedMissingFrame += 1
-                return
-            }
-            
-            // Extract crop from 4K frame and convert to JPEG (CoreImage preserves color accuracy)
+
             guard let jpegData = self.extractCropFrom4K(
                 pixelBuffer: pixelBuffer4K,
                 bbox: bbox4K
@@ -568,6 +575,9 @@ init(config: tj_config_t? = nil) {
     /// Extract a cropped region from a 4K CVPixelBuffer using CoreImage for accurate color.
     /// This preserves the camera's color space metadata (fixes pink/purple color cast).
     private func extractCropFrom4K(pixelBuffer: CVPixelBuffer, bbox: CGRect) -> Data? {
+        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+
         let bufferHeight = CVPixelBufferGetHeight(pixelBuffer)
         
         // Clamp bbox to valid bounds
@@ -804,6 +814,11 @@ extension TrapjawProcessor: CameraManagerDelegate {
         if CoolDownManager.shared.isCoolingDown {
             return
         }
+        
+        // Camera runs at 30fps (4K format doesn't support 15fps on iPhone).
+        // Drop every other frame for true 15fps pipeline behavior.
+        skipFrame.toggle()
+        guard !skipFrame else { return }
         
         // Start frame timing
         timing.startFrame()
