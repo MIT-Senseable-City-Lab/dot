@@ -76,8 +76,6 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     
     private var fourKBuffer: FourKFrameBuffer?
     private var downscaler: MetalDownscaler?
-    private let processingWidth: Int = 1920
-    private let processingHeight: Int = 1080
     
     // Scale factor: 4K / 1080p = 2
     private let cropScaleFactor: CGFloat = 2.0
@@ -92,7 +90,6 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     private let terminatingTracksLock = OSAllocatedUnfairLock<Void>()
     private let motionPauseLock = OSAllocatedUnfairLock<Void>()
     private var isMotionPaused: Bool = false
-    private var startTime: CFAbsoluteTime = 0
     private let config: tj_config_t
     private let statsUpdateInterval: UInt64 = 30
     private let terminationCheckInterval: UInt64 = 60
@@ -109,7 +106,6 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     // MARK: - Timing & Diagnostics
     
     private let timing = TimingMetrics()
-    private let timingLogInterval: UInt64 = 60
     
     // MARK: - Queues
     
@@ -269,7 +265,6 @@ init(config: tj_config_t? = nil) {
         error = nil
         frameIndex = 0
         warmupFramesProcessed = 0
-        startTime = CFAbsoluteTimeGetCurrent()
         metrics.reset()
         trackBuffer.clear()
         networkConfig.startNewSession()

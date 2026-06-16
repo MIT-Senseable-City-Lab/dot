@@ -17,8 +17,6 @@ final class FourKFrameBuffer {
     // MARK: - Configuration
     
     private let maxFrames: Int
-    private let width: Int = 3840
-    private let height: Int = 2160
     
     // MARK: - State
     
@@ -91,13 +89,6 @@ final class FourKFrameBuffer {
         }
     }
     
-    /// Check if a frame is available in the buffer.
-    /// - Parameter frameIndex: The frame index to check
-    /// - Returns: true if frame is available
-    func contains(frameIndex: UInt64) -> Bool {
-        return queue.sync { frames[frameIndex] != nil }
-    }
-    
     /// Get the number of frames currently in the buffer.
     var currentCount: Int {
         return queue.sync { frames.count }
@@ -133,28 +124,4 @@ final class FourKFrameBuffer {
         }
     }
     
-    // MARK: - Statistics
-    
-    /// Get current buffer statistics.
-    func getStats() -> BufferStats {
-        return queue.sync {
-            BufferStats(
-                framesInBuffer: frames.count,
-                maxCapacity: maxFrames,
-                totalStored: totalFramesStored,
-                totalDropped: totalFramesDropped,
-                totalCropsMissed: totalCropsMissed
-            )
-        }
-    }
-}
-
-// MARK: - Statistics Structure
-
-struct BufferStats {
-    let framesInBuffer: Int
-    let maxCapacity: Int
-    let totalStored: UInt64
-    let totalDropped: UInt64
-    let totalCropsMissed: UInt64
 }

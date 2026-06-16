@@ -6,9 +6,6 @@
 //
 
 import Foundation
-import os.log
-
-private let logger = Logger(subsystem: "com.trapjaw.timing", category: "TimingMetrics")
 
 struct StageTiming {
     var count: Int = 0
@@ -45,15 +42,11 @@ final class TimingMetrics {
     var bufferStore = StageTiming()
     var downscale = StageTiming()
     var trapjawProcess = StageTiming()
-    var cropLookup = StageTiming()
-    var cropExtract = StageTiming()
-    var jpegConvert = StageTiming()
     var totalPipeline = StageTiming()
     
     // MARK: - Frame Timing
     
     private var frameStartTime: CFAbsoluteTime = 0
-    private var lastFrameLogTime: CFAbsoluteTime = 0
     private var frameCount: UInt64 = 0
     
     // MARK: - FPS Tracking
@@ -123,9 +116,6 @@ final class TimingMetrics {
         bufferStore.reset()
         downscale.reset()
         trapjawProcess.reset()
-        cropLookup.reset()
-        cropExtract.reset()
-        jpegConvert.reset()
         totalPipeline.reset()
         frameTimestamps.removeAll()
         frameCount = 0

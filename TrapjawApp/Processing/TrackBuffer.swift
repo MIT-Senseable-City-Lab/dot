@@ -35,7 +35,6 @@ final class TrackBuffer {
     private var stitchedIds: [UInt32: UInt32] = [:]
     
     let maxCropsPerTrack: Int = 15
-    let terminationCheckInterval: UInt64 = 60
     
     private init() {}
     
@@ -108,18 +107,6 @@ final class TrackBuffer {
         }
         
         return terminatedTracks
-    }
-    
-    func getActiveBufferedTrackIds() -> Set<UInt32> {
-        return queue.sync { Set(crops.keys) }
-    }
-    
-    func getBufferedCropCount(for trackId: UInt32) -> Int {
-        return queue.sync { crops[trackId]?.count ?? 0 }
-    }
-    
-    func getTotalBufferedCropCount() -> Int {
-        return queue.sync { crops.values.reduce(0) { $0 + $1.count } }
     }
     
     func clear() {
