@@ -8,6 +8,7 @@
 
 import Foundation
 import Combine
+import os
 
 // MARK: - Notifications
 
@@ -29,7 +30,11 @@ final class CoolDownManager {
     // MARK: - Public State
     
     /// Whether the app is currently in a cool-down period
-    private(set) var isCoolingDown = false
+    private let _isCoolingDown = OSAllocatedUnfairLock(initialState: false)
+    private(set) var isCoolingDown: Bool {
+        get { _isCoolingDown.withLock { $0 } }
+        set { _isCoolingDown.withLock { $0 = newValue } }
+    }
     
     /// Time remaining in current cool-down period (in seconds)
     private(set) var coolDownTimeRemaining: Int = 0

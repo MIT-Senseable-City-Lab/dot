@@ -4,7 +4,7 @@ iOS application for real-time insect detection and tracking using the trapjaw li
 
 ## Features
 
-- **Real-time camera processing** at 30fps (4K capture, 1080p processing)
+- **Real-time camera processing** at 15fps (4K capture, 1080p processing)
 - **Async GPU-accelerated pipeline** via Metal compute shaders
 - **4K crop extraction** for higher resolution insect identification
 - **Automatic background model warmup** with configurable frame count
@@ -22,7 +22,7 @@ iOS application for real-time insect detection and tracking using the trapjaw li
 ### Pipeline
 
 ```
-Camera (30fps, 4K, BGRA8)
+Camera (15fps, 4K, BGRA8)
     │
     ├─► FourKFrameBuffer (10 frames, ~330MB)
     │
@@ -90,7 +90,7 @@ Configured for consistent field deployment:
 
 | Setting | Value | Purpose |
 |---------|-------|---------|
-| Session preset | 4K @ 30fps | Capture at highest resolution for crops |
+| Session preset | 4K @ 15fps | Capture at highest resolution for crops |
 | Downscale | Async Metal (4K→1080p) | GPU-accelerated, non-blocking pipeline |
 | Exposure duration | 1/1000 sec | Freeze insect motion |
 | Focus mode | Continuous autofocus | Adapts to scene distance |
@@ -243,7 +243,7 @@ The app displays a minimal heads-up dashboard:
 ├─────────────────────────────────────┤
 │           TRAPJAW                   │
 │                                      │
-│   CAM FPS: 30.0    PROC FPS: 30.0   │
+│   CAM FPS: 15.0    PROC FPS: 15.0   │
 │   AVG MS: 12.00    GPU MS: 10.00    │
 │                                      │
 │   TRACKS: 1        CROPS: 45        │
@@ -314,7 +314,7 @@ Normal Processing          Cool-Down Period          Resume Processing
    ┌──────────┐              ┌──────────┐              ┌──────────┐
    │ Process  │    :55       │ Pause    │    :00       │ Process  │
    │ frames   │─────────────▶│ processing──────────────▶│ frames   │
-   │ (30fps)  │              │ (0fps)   │              │ (30fps)  │
+    │ (15fps)  │              │ (0fps)   │              │ (15fps)  │
    └──────────┘              └──────────┘              └──────────┘
         │                         │                          │
         │                    ┌────┴────┐                     │
@@ -373,8 +373,8 @@ All dependencies are Apple system frameworks. The trapjaw submodule is built as 
 
 | Metric | Typical Value |
 |--------|---------------|
-| Camera FPS | 30 fps |
-| Processing FPS | 30-31 fps |
+| Camera FPS | 15 fps |
+| Processing FPS | 15-16 fps |
 | Downscale latency | 2-4 ms (async, GPU) |
 | Trapjaw latency | 6-10 ms |
 | Total pipeline | 10-15 ms |

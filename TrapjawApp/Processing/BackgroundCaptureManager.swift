@@ -60,7 +60,11 @@ final class BackgroundCaptureManager: ObservableObject {
         // Trigger an initial capture immediately on startup
         // This ensures a background image exists before any tracks arrive
         logger.info("Triggering initial background capture on startup")
-        performCapture(retryCount: 0)
+        performCapture(retryCount: 0) { [weak self] success in
+            if success {
+                self?.lastCapturedKey = self?.currentWindowKey
+            }
+        }
         
         // Schedule periodic check every 60 seconds
         timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
@@ -80,7 +84,7 @@ final class BackgroundCaptureManager: ObservableObject {
     /// Manually trigger a background capture (for testing or on-demand).
     func captureNow() {
         logger.info("Manual background capture triggered")
-        performCapture(retryCount: 0)
+        performCapture(retryCount: 0) { _ in }
     }
     
     // MARK: - Scheduling
@@ -127,16 +131,24 @@ final class BackgroundCaptureManager: ObservableObject {
         }
         
         logger.info("Scheduled background capture at window \(windowKey)")
-        performCapture(retryCount: 0)
-        lastCapturedKey = windowKey
+        
+        // Only set lastCapturedKey after successful upload
+        performCapture(retryCount: 0) { [weak self] success in
+            if success {
+                self?.lastCapturedKey = windowKey
+            } else {
+                logger.info("Background capture failed, will retry on next timer fire")
+            }
+        }
     }
     
     // MARK: - Capture
     
-    private func performCapture(retryCount: Int) {
+    private func performCapture(retryCount: Int, completion: ((Bool) -> Void)? = nil) {
         // Check if background capture is still enabled
         guard settings.backgroundCaptureEnabled else {
             logger.info("Background capture disabled, skipping")
+            completion?(false)
             return
         }
         
@@ -148,10 +160,11 @@ final class BackgroundCaptureManager: ObservableObject {
             if retryCount < self.maxRetryAttempts {
                 logger.info("No 4K frame available, retrying in \(Int(self.retryDelay))s (attempt \(retryCount + 1)/\(self.maxRetryAttempts))")
                 DispatchQueue.global().asyncAfter(deadline: .now() + retryDelay) { [weak self] in
-                    self?.performCapture(retryCount: retryCount + 1)
+                    self?.performCapture(retryCount: retryCount + 1, completion: completion)
                 }
             } else {
                 logger.warning("No 4K frame available after \(self.maxRetryAttempts) retries, skipping background capture")
+                completion?(false)
             }
             return
         }
@@ -159,6 +172,7 @@ final class BackgroundCaptureManager: ObservableObject {
         // Convert CVPixelBuffer to JPEG
         guard let jpegData = pixelBufferToJPEG(pixelBuffer, quality: 0.9) else {
             logger.error("Failed to convert 4K frame to JPEG for background capture")
+            completion?(false)
             return
         }
         
@@ -176,6 +190,7 @@ final class BackgroundCaptureManager: ObservableObject {
                 } else {
                     logger.error("Background image upload failed")
                 }
+                completion?(success)
             }
         }
     }

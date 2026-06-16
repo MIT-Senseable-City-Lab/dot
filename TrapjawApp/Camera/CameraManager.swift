@@ -8,6 +8,7 @@
 
 import AVFoundation
 import UIKit
+import os
 
 protocol CameraManagerDelegate: AnyObject {
     func cameraManager(_ manager: CameraManager, didOutput sampleBuffer: CMSampleBuffer)
@@ -37,7 +38,11 @@ final class CameraManager: NSObject {
     private let isoLockThreshold: Float = 400.0  // Only lock when auto ISO is above this (dark scenes)
     private var exposureMonitorTimer: Timer?
     private var lastExposureModeChange: Date = Date.distantPast
-    private(set) var isInMinExposureMode = false
+    private let _isInMinExposureMode = OSAllocatedUnfairLock(initialState: false)
+    private(set) var isInMinExposureMode: Bool {
+        get { _isInMinExposureMode.withLock { $0 } }
+        set { _isInMinExposureMode.withLock { $0 = newValue } }
+    }
     private var exposureCheckCount: Int = 0
     
     /// Whether the exposure is currently locked to minimum duration (1/1000s).
@@ -107,8 +112,8 @@ final class CameraManager: NSObject {
         do {
             try device.lockForConfiguration()
             
-            // Frame rate: 30fps for consistent pipeline timing
-            let targetFPS = CMTimeMake(value: 1, timescale: 30)
+            // Frame rate: 15fps for consistent pipeline timing
+            let targetFPS = CMTimeMake(value: 1, timescale: 15)
             device.activeVideoMinFrameDuration = targetFPS
             device.activeVideoMaxFrameDuration = targetFPS
             
@@ -175,6 +180,13 @@ func start() {
             self?.stopExposureMonitoring()
             self?.session.stopRunning()
         }
+    }
+    
+    /// Blocks the caller until the output queue is idle.
+    /// Used by TrapjawProcessor.pause() to ensure no frame callback is in flight
+    /// before destroying the bridge.
+    func waitForOutputQueue() {
+        outputQueue.sync { }
     }
 
     // MARK: - Exposure Monitoring
@@ -365,7 +377,7 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
-        if videoClipManager?.isRecording == true {
+        if videoClipManager?.isRecordingActive() == true {
             videoClipManager?.appendSampleBuffer(sampleBuffer)
         }
         delegate?.cameraManager(self, didOutput: sampleBuffer)

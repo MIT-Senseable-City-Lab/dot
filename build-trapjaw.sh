@@ -131,10 +131,22 @@ case "$TARGET" in
         ;;
 esac
 
+# Create XCFramework (universal binary wrapper for device + simulator)
+if [ -f "$OUTPUT_DIR/iphoneos/libtrapjaw.a" ] && [ -f "$OUTPUT_DIR/iphonesimulator/libtrapjaw.a" ]; then
+    echo "==> Creating XCFramework..."
+    xcodebuild -create-xcframework \
+        -library "$OUTPUT_DIR/iphoneos/libtrapjaw.a" \
+        -library "$OUTPUT_DIR/iphonesimulator/libtrapjaw.a" \
+        -output "$OUTPUT_DIR/trapjaw.xcframework" \
+        2>&1 | sed 's/^/    /'
+    echo "==> XCFramework: $OUTPUT_DIR/trapjaw.xcframework"
+fi
+
 # Clean CMake build directories
 rm -rf "$SCRIPT_DIR/trapjaw-build"
 
 echo ""
 echo "==> Build complete. Outputs:"
 echo "    $OUTPUT_DIR/trapjaw.metallib"
+echo "    $OUTPUT_DIR/trapjaw.xcframework"
 ls -la "$OUTPUT_DIR"/*/libtrapjaw.a 2>/dev/null | awk '{print "    " $NF " (" $5 " bytes)"}'

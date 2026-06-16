@@ -167,12 +167,21 @@ final class HTTPUploader {
         uploadErrors = 0
     }
     
-    func uploadDone(trackId: String) {
+    func uploadDone(
+        trackId: String,
+        retryCount: Int = 0,
+        isRetry: Bool = false
+    ) {
         let url = "\(config.getServerURL())/upload_done"
         
         guard let requestURL = URL(string: url) else {
             logger.error("Invalid server URL for done marker")
             return
+        }
+        
+        if !isRetry {
+            pendingUploads += 1
+            NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
         }
         
         var request = URLRequest(url: requestURL)
@@ -181,7 +190,68 @@ final class HTTPUploader {
         request.setValue(config.deviceName, forHTTPHeaderField: "X-Device-Name")
         request.setValue(trackId, forHTTPHeaderField: "X-Track-ID")
         
-        URLSession.shared.dataTask(with: request).resume()
+        let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self else { return }
+            
+            if let error = error {
+                logger.error("Done marker failed (attempt \(retryCount + 1)): \(error.localizedDescription)")
+                
+                if retryCount < self.maxRetries {
+                    let delay = self.baseDelay * pow(2.0, Double(retryCount))
+                    logger.info("Retrying done marker in \(delay)s...")
+                    DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
+                        self.uploadDone(trackId: trackId, retryCount: retryCount + 1, isRetry: true)
+                    }
+                    return
+                }
+                
+                self.pendingUploads -= 1
+                self.uploadErrors += 1
+                NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
+                NotificationCenter.default.post(name: .uploadErrorOccurred, object: nil)
+                return
+            }
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                logger.error("Invalid response type for done marker")
+                
+                if retryCount < self.maxRetries {
+                    let delay = self.baseDelay * pow(2.0, Double(retryCount))
+                    DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
+                        self.uploadDone(trackId: trackId, retryCount: retryCount + 1, isRetry: true)
+                    }
+                    return
+                }
+                
+                self.pendingUploads -= 1
+                self.uploadErrors += 1
+                NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
+                NotificationCenter.default.post(name: .uploadErrorOccurred, object: nil)
+                return
+            }
+            
+            if httpResponse.statusCode == 200 {
+                logger.info("Done marker sent: \(trackId)")
+                self.pendingUploads -= 1
+                NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
+            } else {
+                logger.error("Done marker failed with status \(httpResponse.statusCode)")
+                
+                if retryCount < self.maxRetries {
+                    let delay = self.baseDelay * pow(2.0, Double(retryCount))
+                    DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
+                        self.uploadDone(trackId: trackId, retryCount: retryCount + 1, isRetry: true)
+                    }
+                    return
+                }
+                
+                self.pendingUploads -= 1
+                self.uploadErrors += 1
+                NotificationCenter.default.post(name: .uploadPendingChanged, object: nil)
+                NotificationCenter.default.post(name: .uploadErrorOccurred, object: nil)
+            }
+        }
+        task.resume()
     }
     
     func uploadBackground(
