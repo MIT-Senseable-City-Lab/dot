@@ -26,10 +26,10 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     // MARK: - Public State
 
     let metrics = PerformanceMetrics()
-    private let runningLock = OSAllocatedUnfairLock(initialState: false)
-    private let startingLock = OSAllocatedUnfairLock(initialState: false)
-    private let emergencyStoppedLock = OSAllocatedUnfairLock(initialState: false)
-    private let shuttingDownLock = OSAllocatedUnfairLock(initialState: false)
+    @ObservationIgnored private let runningLock = OSAllocatedUnfairLock(initialState: false)
+    @ObservationIgnored private let startingLock = OSAllocatedUnfairLock(initialState: false)
+    @ObservationIgnored private let emergencyStoppedLock = OSAllocatedUnfairLock(initialState: false)
+    @ObservationIgnored private let shuttingDownLock = OSAllocatedUnfairLock(initialState: false)
     private(set) var isRunning: Bool {
         get { runningLock.withLock { $0 } }
         set { runningLock.withLock { $0 = newValue } }
@@ -468,10 +468,7 @@ init(config: tj_config_t? = nil) {
         guard let bridge else { return }
 
         let allIds = bridge.getAllTrackIds()
-        let resolution = StreamResolution(
-            width: Int(CameraManager.captureWidth),
-            height: Int(CameraManager.captureHeight)
-        )
+        let resolution = StreamResolution.current
 
         let finalizedTracks = trackBuffer.finalizeTerminatedTracks(
             activeTrackIds: allIds,
@@ -700,10 +697,7 @@ init(config: tj_config_t? = nil) {
             procLog.info("checkTerminatedTracks: allTrackIds count=\(allIds.count)")
             lastTerminationTrackCount = allIds.count
         }
-        let resolution = StreamResolution(
-            width: Int(CameraManager.captureWidth),
-            height: Int(CameraManager.captureHeight)
-        )
+        let resolution = StreamResolution.current
 
         let finalizedTracks = trackBuffer.finalizeTerminatedTracks(
             activeTrackIds: allIds,

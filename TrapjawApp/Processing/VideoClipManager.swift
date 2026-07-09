@@ -27,7 +27,7 @@ final class VideoClipManager: ObservableObject {
     @Published private(set) var lastUploadDate: Date?
 
     /// Thread-safe recording state for camera-output queue reads.
-    private let recordingLock = OSAllocatedUnfairLock(initialState: false)
+    @AtomicBool private var recordingState = false
 
     private var timer: Timer?
     private var lastCapturedKey: String?
@@ -64,14 +64,14 @@ final class VideoClipManager: ObservableObject {
     // MARK: - Thread-safe recording state
 
     private func setRecordingState(_ value: Bool) {
-        recordingLock.withLock { $0 = value }
+        recordingState = value
         DispatchQueue.main.async {
             self.isRecording = value
         }
     }
 
     func isRecordingActive() -> Bool {
-        recordingLock.withLock { $0 }
+        recordingState
     }
 
     // MARK: - Public API

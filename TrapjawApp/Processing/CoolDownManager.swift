@@ -30,10 +30,10 @@ final class CoolDownManager {
     // MARK: - Public State
     
     /// Whether the app is currently in a cool-down period
-    private let _isCoolingDown = OSAllocatedUnfairLock(initialState: false)
+    @ObservationIgnored private let coolingDownLock = OSAllocatedUnfairLock(initialState: false)
     private(set) var isCoolingDown: Bool {
-        get { _isCoolingDown.withLock { $0 } }
-        set { _isCoolingDown.withLock { $0 = newValue } }
+        get { coolingDownLock.withLock { $0 } }
+        set { coolingDownLock.withLock { $0 = newValue } }
     }
     
     /// Time remaining in current cool-down period (in seconds)

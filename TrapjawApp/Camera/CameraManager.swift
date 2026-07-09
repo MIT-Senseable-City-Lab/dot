@@ -38,11 +38,7 @@ final class CameraManager: NSObject {
     private let isoLockThreshold: Float = 400.0  // Only lock when auto ISO is above this (dark scenes)
     private var exposureMonitorTimer: Timer?
     private var lastExposureModeChange: Date = Date.distantPast
-    private let _isInMinExposureMode = OSAllocatedUnfairLock(initialState: false)
-    private(set) var isInMinExposureMode: Bool {
-        get { _isInMinExposureMode.withLock { $0 } }
-        set { _isInMinExposureMode.withLock { $0 = newValue } }
-    }
+    @AtomicBool private(set) var isInMinExposureMode = false
     private var exposureCheckCount: Int = 0
     
     /// Whether the exposure is currently locked to minimum duration (1/1000s).
