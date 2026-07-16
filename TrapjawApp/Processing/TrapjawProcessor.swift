@@ -134,7 +134,7 @@ private let sharedCIContext = CIContext(options: [.cacheIntermediates: false])
     
     private var memoryGuardWorkItem: DispatchWorkItem?
     private let memoryCheckInterval: TimeInterval = 5.0
-    private let memoryThresholdMB: Double = 900
+    private let memoryThresholdMB: Double = 1024
 
     // MARK: - Init
 
@@ -156,11 +156,10 @@ init(config: tj_config_t? = nil) {
         
         self.config = cfg
         
-        // Initialize 4K frame buffer (5 frames ~165MB)
-        // At 15fps with every-frame sampling, 5 frames = 333ms of crop-extraction runway.
-        // Early get() in handleCrop eliminates the eviction window — frame is looked up
-        // ~32ms after storage, well within the 333ms budget.
-        self.fourKBuffer = FourKFrameBuffer(maxFrames: 5)
+        // Initialize 4K frame buffer (12 frames ~396MB)
+        // At 15fps, 12 frames = 800ms of crop-extraction runway.
+        // Needed because the new trapjaw flushes crops for the latest 10 frames.
+        self.fourKBuffer = FourKFrameBuffer(maxFrames: 12)
         
         // Initialize Metal downscaler for 4K→1080p
         self.downscaler = MetalDownscaler(device: metalDevice)
@@ -237,8 +236,8 @@ init(config: tj_config_t? = nil) {
     }
     
     @objc private func handleMemoryWarning() {
-        // Reduce 4K buffer to 5 frames on memory warning
-        fourKBuffer?.reduceCapacity(to: 5)
+        // Reduce 4K buffer to 7 frames on memory warning (frees ~66MB)
+        fourKBuffer?.reduceCapacity(to: 7)
     }
     
     @objc private func coolDownStateChanged() {

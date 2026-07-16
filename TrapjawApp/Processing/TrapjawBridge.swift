@@ -17,11 +17,8 @@ private let bridgeLog = Logger(subsystem: "com.trapjaw.bridge", category: "Trapj
 struct CropData {
     let trackID: UInt32
     let bbox: CGRect
-    let width: UInt32
-    let height: UInt32
     let frameIndex: UInt64
     let timestamp: Double
-    let pixelData: Data
 }
 
 /// Swift wrapper around the trapjaw C context.
@@ -223,14 +220,6 @@ final class TrapjawBridge {
             bridgeLog.info("handleCrop #\(myCount): track_id=\(crop.track_id) bbox=\(crop.bbox.x),\(crop.bbox.y) \(crop.bbox.w)x\(crop.bbox.h) frame=\(crop.frame_index)")
         }
 
-        let byteCount = Int(crop.bytes_per_row) * Int(crop.height)
-        let pixelData: Data
-        if let pixels = crop.pixels, byteCount > 0 {
-            pixelData = Data(bytes: pixels, count: byteCount)
-        } else {
-            pixelData = Data()
-        }
-
         let cropData = CropData(
             trackID: crop.track_id,
             bbox: CGRect(
@@ -239,11 +228,8 @@ final class TrapjawBridge {
                 width: CGFloat(crop.bbox.w),
                 height: CGFloat(crop.bbox.h)
             ),
-            width: crop.width,
-            height: crop.height,
             frameIndex: crop.frame_index,
-            timestamp: crop.timestamp_sec,
-            pixelData: pixelData
+            timestamp: crop.timestamp_sec
         )
 
         onCrop?(cropData)
